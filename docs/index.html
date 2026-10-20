@@ -1414,7 +1414,7 @@
     // Reusa el número durante la visita para no consultar GitHub en cada recarga
     try {
       var guardado = JSON.parse(sessionStorage.getItem(CLAVE) || 'null');
-      if (guardado && Date.now() - guardado.t < 10 * 60 * 1000) { mostrar(guardado.n); return; }
+      if (guardado && Date.now() - guardado.t < 5 * 60 * 1000) { mostrar(guardado.n); return; }
     } catch (e) {}
 
     if (!window.fetch) return;
@@ -1428,7 +1428,10 @@
             if (/\.zip$/i.test(a.name)) total += a.download_count || 0;
           });
         });
-        try { sessionStorage.setItem(CLAVE, JSON.stringify({n: total, t: Date.now()})); } catch (e) {}
+        // Solo se guarda si ya hay algo que mostrar: así una descarga nueva aparece al recargar
+        if (total + DESCARGAS_PREVIAS >= MINIMO_PARA_MOSTRAR) {
+          try { sessionStorage.setItem(CLAVE, JSON.stringify({n: total, t: Date.now()})); } catch (e) {}
+        }
         mostrar(total);
       })
       .catch(function(){});

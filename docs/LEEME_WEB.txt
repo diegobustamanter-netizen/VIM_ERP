@@ -1,0 +1,34 @@
+PAGINA WEB DE VIM ERP (GitHub Pages)
+====================================
+
+Esta carpeta (docs) es la pagina web. GitHub Pages la publica gratis en:
+    https://diegobustamanter-netizen.github.io/VIM_ERP/
+
+ACTIVARLA (una sola vez)
+   1. Hacer commit y push de esta carpeta con GitHub Desktop.
+   2. En github.com, entrar al repositorio -> Settings -> Pages.
+   3. En "Build and deployment": Source = Deploy from a branch,
+      Branch = main, carpeta = /docs. Guardar.
+   4. Esperar uno o dos minutos y abrir la direccion de arriba.
+
+ANTES DE PUBLICAR
+   - Correo de contacto: vimerpchile@gmail.com (ya puesto en index.html,
+     seccion Contacto).
+   - Capturas: guardar en docs/img/ como pos.png, reportes.png,
+     productos.png y caja.png. Aparecen solas en la pagina, sin tocar
+     el HTML. Mientras no esten, se ve un dibujo de la pantalla.
+
+BOTON DE DESCARGA
+   Apunta a:
+   https://github.com/diegobustamanter-netizen/VIM_ERP/releases/download/v1.0/VIM_ERP_v1.0_Windows.zip
+   Funciona cuando exista el Release v1.0 con ese ZIP adjunto.
+
+VERSION NUEVA (por ejemplo 1.1)
+   1. Correr crear_paquete_distribucion.bat con VERSION=1.1.
+   2. Crear el Release v1.1 en GitHub y adjuntar el ZIP.
+   3. En index.html cambiar v1.0 por v1.1 en el enlace de descarga, y
+      "Version 1.0" por "Version 1.1" (bajo el boton y en el pie).
+   4. Commit y push.
+
+Los visitantes no necesitan cuenta de GitHub para ver la pagina ni para
+descargar el programa.

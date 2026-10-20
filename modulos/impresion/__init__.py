@@ -4,4 +4,7 @@ from .impresora_termica import (
     imprimir_ticket_venta,
     imprimir_pagina_prueba,
     impresora_configurada,
+    generar_ticket_pdf,
+    guardar_ticket_pdf,
+    datos_de_ejemplo,
 )

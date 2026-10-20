@@ -1,26 +1,15 @@
 """Centro de Descargas: qué se va a exportar y de qué período."""
 
-from datetime import date, timedelta
+from datetime import date
 
 from base import PruebaVIM
 
 
 def rango_de(clave, hoy=None, minimo=None):
-    """Réplica del cálculo de rangos de los atajos del Centro de Descargas."""
-    hoy = hoy or date.today()
-    if clave == "hoy":
-        return hoy, hoy
-    if clave == "ayer":
-        ayer = hoy - timedelta(days=1)
-        return ayer, ayer
-    if clave == "semana":
-        return hoy - timedelta(days=hoy.weekday()), hoy
-    if clave == "mes":
-        return hoy.replace(day=1), hoy
-    if clave == "mes_pasado":
-        fin = hoy.replace(day=1) - timedelta(days=1)
-        return fin.replace(day=1), fin
-    return minimo or date(2000, 1, 1), hoy
+    """Usa el cálculo REAL de los atajos (antes esto era una copia, y la
+    prueba seguía pasando aunque el código de la pantalla cambiara)."""
+    from stub_tk import modulo_reportes
+    return modulo_reportes().rango_de_atajo(clave, hoy or date.today(), minimo)
 
 
 class PruebaAtajosDePeriodo(PruebaVIM):

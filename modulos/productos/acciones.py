@@ -1,10 +1,41 @@
 from tkinter import messagebox
 
 from database import registrar_movimiento, ahora, session_db
+from database.productos import (
+    _resolver_categoria_id, _resolver_proveedor_id,
+    buscar_conflicto_de_codigo, liberar_codigos_de_eliminados,
+)
 from vim_logger import get_logger
 
 
 class ProductosAccionesMixin:
+
+    def guardar_o_actualizar(self):
+        """Un solo botón: si hay un producto cargado se actualiza, si no se crea."""
+        if self.producto_id:
+            self.actualizar_producto()
+        else:
+            self.guardar_producto()
+
+    def _codigos_disponibles(self, conn, codigos, excluir_id=None):
+        """Avisa antes de guardar si el código ya lo usa otro producto.
+
+        Antes solo se enteraba la base (UNIQUE) y el mensaje no decía cuál
+        producto lo tenía. Además no se revisaba que un PLU coincidiera con
+        el código de barras de otro producto.
+        """
+        conflicto = buscar_conflicto_de_codigo(conn, codigos, excluir_id)
+        if conflicto and conflicto["activo"]:
+            messagebox.showerror(
+                "Código repetido",
+                f"El código {conflicto['codigo']} ya lo usa el producto "
+                f"«{conflicto['nombre']}».\n\nUsa otro código o edita ese producto."
+            )
+            self.entry_codigo_barras.focus_set()
+            return False
+        # Si solo lo tenía un producto eliminado, se le quita y queda libre
+        liberar_codigos_de_eliminados(conn, codigos, excluir_id)
+        return True
 
     def guardar_producto(self):
         datos = self.obtener_datos_formulario()
@@ -18,42 +49,26 @@ class ProductosAccionesMixin:
                 categoria_texto = datos[9]
                 proveedor_texto = datos[10]
                 tipo_venta = datos[11]
+                tipo_item = datos[12]
 
                 codigo_barras = datos[0] or None
                 codigo_pos = datos[1] or None
+
+                if not self._codigos_disponibles(conn, [codigo_barras, codigo_pos]):
+                    return
 
                 unidad_medida = "kg" if tipo_venta == "peso" else "unidad"
                 categoria_id = None
                 proveedor_id = None
                 permite_descuento = 1
 
-                if categoria_texto:
-                    cursor.execute(
-                        """
-                        SELECT id
-                        FROM categorias
-                        WHERE nombre = ? COLLATE NOCASE
-                        LIMIT 1
-                        """,
-                        (categoria_texto,)
-                    )
-                    fila = cursor.fetchone()
-                    if fila:
-                        categoria_id = fila[0]
-
-                if proveedor_texto:
-                    cursor.execute(
-                        """
-                        SELECT id
-                        FROM proveedores
-                        WHERE nombre = ? COLLATE NOCASE
-                        LIMIT 1
-                        """,
-                        (proveedor_texto,)
-                    )
-                    fila = cursor.fetchone()
-                    if fila:
-                        proveedor_id = fila[0]
+                # Si la categoría o el proveedor escritos no existen, se crean.
+                # Antes solo se buscaban y, al no encontrarlos, el producto
+                # quedaba guardado sin categoría ni proveedor.
+                categoria_id = _resolver_categoria_id(
+                    conn, categoria_texto=categoria_texto, crear_si_no_existe=True)
+                proveedor_id = _resolver_proveedor_id(
+                    conn, proveedor_texto=proveedor_texto, crear_si_no_existe=True)
 
                 cursor.execute(
                     """
@@ -71,11 +86,12 @@ class ProductosAccionesMixin:
                         stock_minimo,
                         unidad_medida,
                         tipo_venta,
+                        tipo_item,
                         permite_descuento,
                         activo,
                         fecha_creacion
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
                     """,
                     (
                         codigo_barras,
@@ -91,6 +107,7 @@ class ProductosAccionesMixin:
                         datos[8],
                         unidad_medida,
                         tipo_venta,
+                        tipo_item,
                         permite_descuento,
                         ahora(),
                     )
@@ -142,7 +159,8 @@ class ProductosAccionesMixin:
                            precio_por_kilo,
                            stock,
                            stock_minimo,
-                           tipo_venta
+                           tipo_venta,
+                           tipo_item
                     FROM productos
                     WHERE id = ?
                     """,
@@ -157,41 +175,26 @@ class ProductosAccionesMixin:
                 categoria_texto = datos[9]
                 proveedor_texto = datos[10]
                 tipo_venta = datos[11]
+                tipo_item = datos[12]
 
                 codigo_barras = datos[0] or None
                 codigo_pos = datos[1] or None
+
+                if not self._codigos_disponibles(conn, [codigo_barras, codigo_pos],
+                                                 excluir_id=self.producto_id):
+                    return
                 unidad_medida = "kg" if tipo_venta == "peso" else "unidad"
 
                 categoria_id = None
                 proveedor_id = None
 
-                if categoria_texto:
-                    cursor.execute(
-                        """
-                        SELECT id
-                        FROM categorias
-                        WHERE nombre = ? COLLATE NOCASE
-                        LIMIT 1
-                        """,
-                        (categoria_texto,)
-                    )
-                    fila = cursor.fetchone()
-                    if fila:
-                        categoria_id = fila[0]
-
-                if proveedor_texto:
-                    cursor.execute(
-                        """
-                        SELECT id
-                        FROM proveedores
-                        WHERE nombre = ? COLLATE NOCASE
-                        LIMIT 1
-                        """,
-                        (proveedor_texto,)
-                    )
-                    fila = cursor.fetchone()
-                    if fila:
-                        proveedor_id = fila[0]
+                # Si la categoría o el proveedor escritos no existen, se crean.
+                # Antes solo se buscaban y, al no encontrarlos, el producto
+                # quedaba guardado sin categoría ni proveedor.
+                categoria_id = _resolver_categoria_id(
+                    conn, categoria_texto=categoria_texto, crear_si_no_existe=True)
+                proveedor_id = _resolver_proveedor_id(
+                    conn, proveedor_texto=proveedor_texto, crear_si_no_existe=True)
 
                 cursor.execute(
                     """
@@ -209,6 +212,7 @@ class ProductosAccionesMixin:
                         stock_minimo = ?,
                         unidad_medida = ?,
                         tipo_venta = ?,
+                        tipo_item = ?,
                         fecha_actualizacion = ?
                     WHERE id = ?
                     """,
@@ -226,6 +230,7 @@ class ProductosAccionesMixin:
                         datos[8],
                         unidad_medida,
                         tipo_venta,
+                        tipo_item,
                         ahora(),
                         self.producto_id
                     )
@@ -247,7 +252,8 @@ class ProductosAccionesMixin:
                     "Precio por kilo",
                     "Stock",
                     "Stock mínimo",
-                    "Tipo venta"
+                    "Tipo venta",
+                    "Tipo de ítem"
                 ]
 
                 datos_comparacion = (
@@ -262,7 +268,8 @@ class ProductosAccionesMixin:
                     datos[6],
                     datos[7],
                     datos[8],
-                    tipo_venta
+                    tipo_venta,
+                    tipo_item
                 )
 
                 cambios = []

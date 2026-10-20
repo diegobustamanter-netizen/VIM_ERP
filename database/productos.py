@@ -92,6 +92,59 @@ def _resolver_proveedor_id(
     return None
 
 
+# ============================================================
+# CÓDIGOS ÚNICOS
+# ============================================================
+def buscar_conflicto_de_codigo(conn, codigos, excluir_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    """Producto que ya usa alguno de `codigos`, como código de barras O como PLU.
+
+    Se cruzan las dos columnas: si un producto tiene el PLU "501" y otro el
+    código de barras "501", al escanear "501" el POS no sabría cuál es.
+    Devuelve {id, nombre, activo, codigo} o None.
+    """
+    codigos = [c.strip() for c in codigos if c and str(c).strip()]
+    if not codigos:
+        return None
+    marcas = ",".join("?" * len(codigos))
+    fila = conn.execute(
+        f"""
+        SELECT id, nombre, activo,
+               CASE WHEN codigo_barras IN ({marcas}) THEN codigo_barras ELSE codigo_pos END AS codigo
+        FROM productos
+        WHERE (codigo_barras IN ({marcas}) OR codigo_pos IN ({marcas}))
+          AND id != ?
+        ORDER BY activo DESC
+        LIMIT 1
+        """,
+        (*codigos, *codigos, *codigos, excluir_id or -1),
+    ).fetchone()
+    if not fila:
+        return None
+    return {"id": fila[0], "nombre": fila[1], "activo": fila[2], "codigo": fila[3]}
+
+
+def liberar_codigos_de_eliminados(conn, codigos, excluir_id: Optional[int] = None) -> int:
+    """Quita `codigos` a los productos eliminados que todavía los tienen.
+
+    Eliminar un producto es una baja lógica: el registro queda (las ventas
+    viejas lo necesitan) y con él sus códigos. Sin esto no se podía volver a
+    usar el código de un producto borrado.
+    """
+    codigos = [c.strip() for c in codigos if c and str(c).strip()]
+    if not codigos:
+        return 0
+    marcas = ",".join("?" * len(codigos))
+    liberados = 0
+    for columna in ("codigo_barras", "codigo_pos"):
+        cur = conn.execute(
+            f"UPDATE productos SET {columna} = NULL "
+            f"WHERE activo = 0 AND id != ? AND {columna} IN ({marcas})",
+            (excluir_id or -1, *codigos),
+        )
+        liberados += cur.rowcount
+    return liberados
+
+
 def obtener_categoria_id_por_nombre(
     nombre: str,
     crear_si_no_existe: bool = False

@@ -359,11 +359,103 @@ def imprimir_ticket_venta(datos: dict, copias: int | None = None):
         _imprimir_raw(impresora, payload)
 
 
-def imprimir_pagina_prueba(nombre_impresora: str, tamano: str = "58mm"):
-    """Imprime una página de prueba para verificar la conexión."""
-    from database.utils import ahora
+# ============================================================
+# COMPROBANTE EN PDF (sin impresora)
+# ============================================================
+# Sirve para entregar el comprobante por correo/WhatsApp y para probar
+# el formato sin tener una impresora térmica. Se arma a mano (PDF 1.4 con
+# la fuente Courier de serie) para no sumar dependencias al .exe.
 
-    datos = {
+_COMANDOS_ESCPOS = (CMD_INIT, CMD_CODEPAGE_PC850, CMD_ALIGN_LEFT, CMD_ALIGN_CENTER,
+                    CMD_BOLD_ON, CMD_BOLD_OFF, CMD_DOBLE_ON, CMD_DOBLE_OFF,
+                    CMD_FEED_Y_CORTE)
+
+
+def _lineas_del_ticket(datos: dict, config: dict):
+    """El mismo ticket que se imprime, como líneas de texto plano.
+
+    Se parte de los bytes ESC/POS para que el PDF nunca se aparte de lo que
+    sale en papel: se respeta la alineación y se quitan los demás comandos.
+    """
+    ancho = ANCHO_58MM if config.get("ticket_tamano", "58mm") == "58mm" else ANCHO_80MM
+    crudo = generar_ticket_escpos(datos, config)
+    crudo = crudo.replace(CMD_ALIGN_CENTER, b"\x01").replace(CMD_ALIGN_LEFT, b"\x02")
+    for cmd in _COMANDOS_ESCPOS:
+        crudo = crudo.replace(cmd, b"")
+
+    lineas, centrado, actual = [], False, ""
+    for car in crudo.decode("cp850", errors="replace"):
+        if car == "\x01":
+            centrado = True
+        elif car == "\x02":
+            centrado = False
+        elif car == "\n":
+            if centrado:
+                actual = actual.center(ancho).rstrip()
+            elif actual.startswith("TOTAL"):
+                # En papel va en letra doble: en el PDF se ocupa todo el ancho
+                actual = _fila("TOTAL", actual[len("TOTAL"):].strip(), ancho)
+            lineas.append(actual.rstrip())
+            actual = ""
+        else:
+            actual += car
+    while lineas and not lineas[-1].strip():
+        lineas.pop()
+    return lineas, ancho
+
+
+def _escapar_pdf(texto: str) -> bytes:
+    t = texto.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    return t.encode("cp1252", errors="replace")
+
+
+def generar_ticket_pdf(datos: dict, config: dict | None = None) -> bytes:
+    """Bytes de un PDF de una página con el comprobante, del ancho del papel."""
+    config = dict(config if config is not None else _cargar_config_impresion())
+    lineas, ancho = _lineas_del_ticket(datos, config)
+
+    fuente, interlinea, margen = 9, 11, 14
+    ancho_pt = int(ancho * fuente * 0.6 + 2 * margen)
+    alto_pt = int(len(lineas) * interlinea + 2 * margen)
+
+    contenido = bytearray(b"BT /F1 %d Tf %d TL %d %d Td\n" % (fuente, interlinea, margen, alto_pt - margen - fuente))
+    for ln in lineas:
+        contenido += b"(" + _escapar_pdf(ln) + b") Tj T*\n"
+    contenido += b"ET\n"
+
+    objetos = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d %d] "
+        b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>" % (ancho_pt, alto_pt),
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>",
+        b"<< /Length %d >>\nstream\n" % len(contenido) + bytes(contenido) + b"endstream",
+    ]
+    pdf = bytearray(b"%PDF-1.4\n")
+    posiciones = []
+    for i, obj in enumerate(objetos, start=1):
+        posiciones.append(len(pdf))
+        pdf += b"%d 0 obj\n" % i + obj + b"\nendobj\n"
+    inicio_xref = len(pdf)
+    pdf += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objetos) + 1)
+    for pos in posiciones:
+        pdf += b"%010d 00000 n \n" % pos
+    pdf += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objetos) + 1, inicio_xref)
+    return bytes(pdf)
+
+
+def guardar_ticket_pdf(datos: dict, ruta: str, config: dict | None = None) -> str:
+    """Guarda el comprobante como PDF en `ruta` y la devuelve."""
+    with open(ruta, "wb") as f:
+        f.write(generar_ticket_pdf(datos, config))
+    _log.info(f"Comprobante guardado como PDF: {ruta}")
+    return ruta
+
+
+def datos_de_ejemplo():
+    """Venta ficticia para la página de prueba y la vista previa."""
+    from database.utils import ahora
+    return {
         "folio": "PRUEBA-001",
         "fecha": ahora("%d/%m/%Y %H:%M"),
         "cajero": "Prueba",
@@ -378,6 +470,11 @@ def imprimir_pagina_prueba(nombre_impresora: str, tamano: str = "58mm"):
         "pago": 10000,
         "vuelto": 3010,
     }
+
+
+def imprimir_pagina_prueba(nombre_impresora: str, tamano: str = "58mm"):
+    """Imprime una página de prueba para verificar la conexión."""
+    datos = datos_de_ejemplo()
     config = _cargar_config_impresion()
     config["ticket_tamano"] = tamano
     payload = generar_ticket_escpos(datos, config)

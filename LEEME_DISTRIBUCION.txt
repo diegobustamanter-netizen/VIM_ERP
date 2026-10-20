@@ -8,13 +8,16 @@ Funciona sin internet. Los datos quedan en su propio computador.
 CONTENIDO DEL PAQUETE
 ---------------------
 - VIM_ERP.exe ................ El programa (no requiere instalacion)
-- Manual_de_Uso_VIM_ERP.docx . Manual paso a paso (LEALO PRIMERO)
-- LEEME_DISTRIBUCION.txt ..... Este archivo
+- Manual_de_Uso_VIM_ERP ...... Manual paso a paso (LEALO PRIMERO)
+- LEEME.txt .................. Este archivo
+- LICENCIA.txt ............... Condiciones de uso
+- VERSION.txt ................ Version, fecha y huella del programa
 
 
 COMO EMPEZAR
 ------------
 1. Extraiga el ZIP en una carpeta local (Escritorio o Documentos).
+   No abra el programa desde dentro del ZIP.
 2. Abra VIM_ERP.exe.
 
    Windows puede mostrar un aviso azul que dice "Windows protegio su PC".
@@ -53,7 +56,8 @@ Ahi dentro:
    \logs ....... registro de errores, util si algo falla
 
 Para llegar rapido: copie esa ruta y peguela en el explorador de archivos.
-Desde el modulo Backup tambien hay un boton "Abrir carpeta".
+Al actualizar a una version nueva, sus datos se conservan: solo se
+reemplaza VIM_ERP.exe.
 
 
 COPIAS DE SEGURIDAD (LEA ESTO)
@@ -81,28 +85,43 @@ se convierten todos los items y el stock queda en cero. Elija bien la
 primera vez.
 
 
-IMPUESTOS
----------
+IMPUESTOS Y MONEDA
+------------------
 En Configuracion > Finanzas puede fijar el IVA. Si su negocio no lo
 maneja, ponga 0 y el precio que cargue sera el precio que se cobre.
+Ahi mismo hay un ejemplo que muestra como queda el precio final.
+
+El programa usa el signo $ y montos sin decimales.
 
 
-IMPRESORA DE BOLETAS
---------------------
+TICKETS E IMPRESORA
+-------------------
 Funcionan las impresoras termicas de 58mm y 80mm instaladas en Windows
 (protocolo ESC/POS). Se configuran en Configuracion > Empresa.
+Sin impresora tambien puede vender: el comprobante se ve en pantalla y
+se puede guardar en PDF.
 
 
 LO QUE ESTE PROGRAMA NO HACE
 ----------------------------
-- NO emite boletas ni facturas electronicas ante el SII. Los tickets que
-  imprime son comprobantes internos, sin validez tributaria. Para emitir
+- NO emite boletas ni facturas electronicas ante el SII. Lo que imprime
+  es un comprobante interno, sin validez tributaria. Para emitir
   documentos validos use el sistema del SII o un software certificado.
 
 - NO comparte datos entre varios computadores. Cada PC tiene su propia
   base. Para pasar datos de uno a otro, haga un backup y restaurelo.
 
 - NO se actualiza solo. Si sale una version nueva hay que descargarla.
+
+
+VERIFICAR LA DESCARGA (OPCIONAL)
+--------------------------------
+VERSION.txt trae la huella SHA-256 de VIM_ERP.exe. Para comprobar que
+el archivo no fue alterado, abra PowerShell en esta carpeta y escriba:
+
+   Get-FileHash VIM_ERP.exe
+
+El resultado debe ser igual al de VERSION.txt.
 
 
 REQUISITOS

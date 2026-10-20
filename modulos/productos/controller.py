@@ -167,6 +167,7 @@ class ModuloProductos(
         self.actualizar_campos_segun_tipo()
         if hasattr(self, '_verificar_exclusividad_codigos'):
             self._verificar_exclusividad_codigos()
+        self.actualizar_boton_guardar()
 
 
 def abrir_modulo_productos(root, frame_contenido, volver_menu):

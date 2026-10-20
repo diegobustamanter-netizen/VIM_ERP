@@ -45,15 +45,42 @@ class PruebaMontosEnteros(PruebaVIM):
     # La suma cuadra (lo que valida el SII)
     # ------------------------------------------------------------------
 
-    def test_neto_mas_iva_es_exactamente_el_total(self):
-        for monto in range(1, 3000, 7):          # ~430 montos distintos
-            for incluido in (True, False):
-                with self.subTest(monto=monto, incluido=incluido):
-                    total, iva = self._calcular(monto, incluido=incluido)
-                    neto = total - iva
+    def test_el_iva_es_el_que_corresponde_al_neto(self):
+        """Neto e IVA se calculan de verdad, no por resta de sí mismos.
 
-                    self.assertEqual(neto + iva, total,
-                                     f"No cuadra: {neto} + {iva} != {total}")
+        Antes esta prueba calculaba neto = total - iva y comprobaba que
+        neto + iva == total: siempre era verdad, así que no cuidaba nada.
+        """
+        from decimal import Decimal, ROUND_HALF_UP
+
+        def a_peso(x):
+            return int(Decimal(x).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+        for monto in range(1, 3000, 7):          # ~430 montos distintos
+            with self.subTest(monto=monto, incluido=False):
+                total, iva = self._calcular(monto, incluido=False)
+                self.assertEqual(iva, a_peso(Decimal(monto) * Decimal("0.19")))
+                self.assertEqual(total, monto + iva)
+
+            with self.subTest(monto=monto, incluido=True):
+                total, iva = self._calcular(monto, incluido=True)
+                self.assertEqual(total, monto)
+                self.assertEqual(total - iva, a_peso(Decimal(monto) / Decimal("1.19")))
+
+    def test_el_medio_peso_redondea_hacia_arriba(self):
+        """round() de Python deja 28,5 en 28 (redondeo al par). El SII y
+        cualquier calculadora dan 29."""
+        for neto, iva_esperado in [(150, 29), (350, 67), (550, 105), (50, 10)]:
+            with self.subTest(neto=neto):
+                total, iva = self._calcular(neto, incluido=False)
+                self.assertEqual(iva, iva_esperado,
+                                 "El IVA volvió a redondear el ,5 hacia abajo")
+                self.assertEqual(total, neto + iva_esperado)
+
+    def test_valores_conocidos_con_iva_incluido(self):
+        """$1.000 con IVA incluido son $840 netos + $160 de IVA."""
+        total, iva = self._calcular(1000, incluido=True)
+        self.assertEqual((total, iva), (1000, 160))
 
     def test_con_iva_incluido_el_total_es_el_precio_de_etiqueta(self):
         """El cliente paga lo que dice el precio, sin sorpresas."""
@@ -88,10 +115,11 @@ class PruebaMontosEnteros(PruebaVIM):
                 self.assertEqual(iva, 0)
 
     def test_un_peso_no_rompe(self):
-        total, iva = self._calcular(1, incluido=True)
-
-        self.assertEqual(total, 1)
-        self.assertEqual(total - iva + iva, total)
+        for incluido in (True, False):
+            with self.subTest(incluido=incluido):
+                total, iva = self._calcular(1, incluido=incluido)
+                self.assertEqual(total, 1, "Un peso no puede cambiar de valor")
+                self.assertEqual(iva, 0, "El IVA de $1 redondea a $0")
 
     # ------------------------------------------------------------------
     # De punta a punta: lo que queda guardado en la base

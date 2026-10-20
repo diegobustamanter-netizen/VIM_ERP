@@ -50,8 +50,9 @@ class ProductosHistorialMixin:
             "Detalles"
         )
 
+        # El tema se fija una sola vez al iniciar (ventana_principal.py);
+        # cambiarlo acá alteraba el aspecto de todo el programa.
         style = ttk.Style()
-        style.theme_use("default")
 
         style.configure(
             "Historial.Treeview",

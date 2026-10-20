@@ -148,7 +148,7 @@ def inicializar_db() -> None:
             CREATE TABLE IF NOT EXISTS ventas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 folio TEXT UNIQUE,
-                tipo_documento TEXT NOT NULL DEFAULT 'boleta',
+                tipo_documento TEXT NOT NULL DEFAULT 'comprobante',
                 fecha TEXT NOT NULL,
                 usuario_id INTEGER,
                 caja_sesion_id INTEGER,
@@ -359,7 +359,10 @@ def inicializar_db() -> None:
         # ============================================================
 
         _agregar_columna_si_no_existe(cursor, "ventas", "caja_sesion_id", "INTEGER")
-        _agregar_columna_si_no_existe(cursor, "ventas", "tipo_documento", "TEXT NOT NULL DEFAULT 'boleta'")
+        _agregar_columna_si_no_existe(cursor, "ventas", "tipo_documento", "TEXT NOT NULL DEFAULT 'comprobante'")
+        # VIM ERP no emite boletas del SII: lo que entrega es un comprobante
+        # interno. Las ventas viejas quedaron marcadas como 'boleta' por error.
+        cursor.execute("UPDATE ventas SET tipo_documento = 'comprobante' WHERE tipo_documento = 'boleta'")
         _agregar_columna_si_no_existe(cursor, "movimientos_caja", "caja_sesion_id", "INTEGER")
         _agregar_columna_si_no_existe(cursor, "movimientos_caja", "categoria", "TEXT")
         _agregar_columna_si_no_existe(cursor, "movimientos_caja", "pago_documento_id", "INTEGER")

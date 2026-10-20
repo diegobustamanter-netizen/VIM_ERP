@@ -125,7 +125,7 @@ def crear_venta(
     descuento: float = 0,
     impuesto: float = 0,
     observacion: str = "",
-    tipo_documento: str = "boleta",
+    tipo_documento: str = "comprobante",
 ) -> int:
 
     if not items:
@@ -231,25 +231,18 @@ def crear_venta(
         # total_base es el subtotal de líneas menos descuentos generales si hubiera
         total_base = subtotal - float(descuento)
         
-        iva_pct = float(config_fin.get("iva_porcentaje", 19))
-        iva_incluido = config_fin.get("iva_incluido", True)
-
-        # Si no se especifica impuesto, se calcula automáticamente según configuración
+        # Si no se especifica impuesto, se calcula según configuración con la
+        # MISMA función que usa la pantalla del POS: lo que ve el cajero es lo
+        # que se cobra y se guarda.
         if float(impuesto) == 0:
-            from .finanzas_utils import calcular_total_con_iva
-            total_calculado, impuesto_calculado = calcular_total_con_iva(
-                total_base, 
-                iva_pct, 
-                incluye_iva=iva_incluido
-            )
-            total = total_calculado
-            impuesto = impuesto_calculado
+            from .finanzas_utils import calcular_totales_venta
+            montos = calcular_totales_venta(total_base, config_fin, metodo_pago)
+            total = montos["total"]
+            impuesto = montos["impuesto"]
         else:
             # Si se especifica un impuesto manual, el total es base + impuesto
-            total = total_base + float(impuesto)
-
-        # Aplicar redondeo si está configurado
-        total = aplicar_redondeo(total, config_fin["redondeo_automatico"])
+            total = aplicar_redondeo(total_base + float(impuesto),
+                                     config_fin["redondeo_automatico"] and metodo_pago == "efectivo")
 
         if float(monto_pagado) < total:
             raise ValueError("Pago insuficiente")
@@ -698,15 +691,28 @@ def obtener_reportes_avanzados(
         ORDER BY strftime('%H', v.fecha) ASC
     """
 
+    query_dia = f"""
+        SELECT 
+            date(v.fecha) as dia,
+            COUNT(v.id) as tickets,
+            SUM(v.total) as ingresos_totales
+        FROM ventas v
+        WHERE {filtro_ventas} AND v.fecha IS NOT NULL
+        GROUP BY date(v.fecha)
+        ORDER BY date(v.fecha) ASC
+    """
+
     with session_db(dict_rows=True) as conn:
         top_productos = conn.execute(query_prod, params_ventas).fetchall()
         top_categorias = conn.execute(query_cat, params_ventas).fetchall()
         ventas_hora = conn.execute(query_hora, params_ventas).fetchall()
+        ventas_dia = conn.execute(query_dia, params_ventas).fetchall()
 
     return {
         "top_productos": top_productos,
         "top_categorias": top_categorias,
-        "ventas_por_hora": ventas_hora
+        "ventas_por_hora": ventas_hora,
+        "ventas_por_dia": ventas_dia,
     }
 
 
@@ -771,13 +777,22 @@ def anular_venta(venta_id: int, usuario_id: Optional[int], motivo: str = "Anulac
                 """, (ahora(), pid, cant, cant, venta_id, usuario_id, f"Anulación Venta {folio}: {motivo}", pid))
 
             # 4. Revertir movimiento en caja
+            # Solo una venta en efectivo devuelve billetes del cajón (egreso).
+            # Una con tarjeta o transferencia se descuenta de su propio medio:
+            # antes todas salían como egreso y el "efectivo esperado" de la
+            # caja quedaba corto por plata que nunca entró al cajón.
+            metodo = str(venta["metodo_pago"] or "efectivo").lower()
+            if metodo in ("tarjeta", "transferencia"):
+                tipo_mov, monto_mov = f"venta_{metodo}", -abs(venta["total"])
+            else:
+                tipo_mov, monto_mov = "egreso", abs(venta["total"])
             cursor.execute("""
                 INSERT INTO movimientos_caja (
                     caja_sesion_id, fecha, tipo, categoria, monto,
                     descripcion, usuario_id, referencia_id, referencia_tabla
                 )
-                VALUES (?, ?, 'egreso', 'anulación', ?, ?, ?, ?, 'ventas')
-            """, (caja_sesion_id, ahora(), abs(venta["total"]), f"Anulación {folio}: {motivo}", usuario_id, venta_id))
+                VALUES (?, ?, ?, 'anulación', ?, ?, ?, ?, 'ventas')
+            """, (caja_sesion_id, ahora(), tipo_mov, monto_mov, f"Anulación {folio}: {motivo}", usuario_id, venta_id))
 
             # 5. Cambiar estado de la venta
             cursor.execute("UPDATE ventas SET estado = 'anulada', observacion = ? WHERE id = ?", (f"ANULADA: {motivo}", venta_id))

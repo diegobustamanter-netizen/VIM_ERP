@@ -157,7 +157,7 @@ espacio()
 espacio()
 foto("Portada: pantalla del menú principal de VIM ERP")
 espacio()
-portada_sub("Versión 1.0  ·  Agosto 2026")
+portada_sub("Versión 1.0  ·  Octubre 2026")
 portada_sub("Desarrollado por Diego Francisco Bustamante Ríos")
 
 
@@ -237,6 +237,12 @@ aviso(
 )
 foto("Pantalla azul de Windows SmartScreen, con la opción «Más información» señalada")
 
+texto(
+    "Al abrirlo aparece el logo de VIM ERP por un par de segundos mientras el programa se "
+    "prepara. Después sale la pantalla de inicio de sesión."
+)
+foto("Logo de carga al abrir el programa")
+
 h2("1.2  El asistente de configuración inicial")
 texto(
     "La primera vez, el programa le hace dos preguntas. No se pueden saltar, porque de ellas "
@@ -260,7 +266,8 @@ tabla(
 
 aviso(
     "Elija bien esta primera vez. Se puede cambiar después en Configuración → Finanzas, "
-    "pero al cambiarlo se convierten todos sus ítems y el stock queda en cero."
+    "pero al cambiarlo se convierten todos sus ítems y el stock queda en cero. Por eso el "
+    "programa le pide confirmar y escribir PRODUCTOS o SERVICIOS antes de hacer el cambio."
 )
 foto("Asistente inicial: las dos tarjetas, Productos y Servicios")
 
@@ -318,7 +325,12 @@ texto(
 punto("Nombre del negocio — aparece arriba del ticket.")
 punto("Mensaje al pie — por ejemplo «¡Gracias por su compra!».")
 punto("Logo — se puede cambiar por el de su negocio.")
+punto(
+    "📄 Vista previa — abre un PDF con cómo se verá su ticket, aunque todavía no tenga "
+    "impresora."
+)
 foto("Configuración → Empresa")
+foto("Vista previa del ticket en PDF")
 
 h2("2.2  IVA e impuestos")
 texto("En la sección Finanzas define cómo se calculan los impuestos. Hay dos decisiones:")
@@ -344,17 +356,51 @@ tip(
     "Para un negocio de mostrador lo normal es dejarla MARCADA: usted carga el precio de la "
     "etiqueta y eso es lo que paga el cliente."
 )
-foto("Configuración → Finanzas, con el IVA y las casillas")
+
+h3("Redondear a $10 los pagos en efectivo")
+texto(
+    "Si marca esta casilla, los cobros en efectivo se redondean a la decena más cercana, "
+    "porque no circulan monedas de $1 ni de $5: $1.234 se cobra $1.230 y $1.235 se cobra "
+    "$1.240. Con tarjeta o transferencia se cobra el monto exacto, sin redondear."
+)
+
+h3("El ejemplo en vivo")
+texto(
+    "Debajo de las casillas, el programa muestra cómo queda un producto de $1.235 con lo que "
+    "tiene marcado. Si cambia el IVA o una casilla, el ejemplo se actualiza al tiro, antes de "
+    "guardar. Úselo para comprobar que el precio final es el que usted espera."
+)
+foto("Configuración → Finanzas, con el IVA, las casillas y el ejemplo en vivo")
+
+h3("Moneda y régimen tributario")
+punto(
+    "Moneda — el programa trabaja con el signo $ y montos sin decimales. Sirve para "
+    "cualquier país que use el peso o una moneda sin centavos."
+)
+punto(
+    "Régimen tributario — es solo un dato informativo para usted y su contador. No cambia "
+    "precios, IVA ni totales."
+)
 
 h2("2.3  Impresora de tickets")
 texto(
     "El programa funciona con impresoras térmicas de 58mm y 80mm que ya estén instaladas en "
     "Windows. Se eligen en Configuración → Empresa."
 )
-punto("Si no configura ninguna impresora, igual puede vender: el recibo se muestra en pantalla.")
+punto("La impresora queda guardada apenas la elige en la lista.")
+punto(
+    "Si no configura ninguna impresora, igual puede vender: el comprobante se muestra en "
+    "pantalla y lo puede guardar en PDF."
+)
 punto("Puede activar o desactivar la impresión automática al cerrar cada venta.")
 punto("Puede decidir si el ticket muestra el desglose del IVA o solo el total.")
 foto("Configuración de la impresora térmica")
+
+aviso(
+    "Lo que imprime VIM ERP es un COMPROBANTE INTERNO de venta y así lo dice al pie: "
+    "«No válido como boleta (SII)». Si necesita emitir boletas, hágalo aparte con el sistema "
+    "del SII o con un proveedor certificado."
+)
 
 
 # ════════════════════════════════════════════════════════════
@@ -373,7 +419,7 @@ h2("3.1  Cargar un producto nuevo")
 
 paso(1, "Entre a 🏷️ Productos desde el menú principal.")
 paso(2, "Complete los campos del formulario de la izquierda.")
-paso(3, "Presione Guardar. El producto aparece en la lista de la derecha.")
+paso(3, "Presione «Guardar producto nuevo» o la tecla Enter. El producto aparece en la lista de la derecha.")
 
 h3("Qué significa cada campo")
 
@@ -397,6 +443,17 @@ aviso(
     "cuánto está ganando de verdad: le va a mostrar que toda la venta es ganancia."
 )
 foto("Formulario de producto con los campos completos")
+
+h3("Códigos repetidos")
+texto(
+    "Un mismo código no puede ser de dos productos, ni siquiera si en uno es código de barras "
+    "y en otro es PLU: el lector no sabría cuál cobrar. Si lo intenta, el programa le avisa "
+    "qué producto ya usa ese código y no guarda."
+)
+tip(
+    "Si eliminó un producto, su código queda libre y lo puede usar en uno nuevo."
+)
+foto("Aviso de código repetido")
 
 h2("3.2  Vender por unidad o por peso")
 texto("En el campo «Tipo de venta» elige cómo se cobra:")
@@ -425,7 +482,11 @@ texto(
 )
 
 h2("3.4  Editar y eliminar")
-punto("Para editar: haga clic en el producto de la lista, cambie lo que necesite y guarde.")
+punto(
+    "Para editar: haga clic en el producto de la lista. El botón cambia a «Guardar cambios»; "
+    "cambie lo que necesite y presiónelo."
+)
+punto("Para volver a cargar uno nuevo, presione «Nuevo / Limpiar».")
 punto("Para eliminar: seleccione el producto y presione Eliminar.")
 
 texto(
@@ -467,6 +528,12 @@ punto("Cuánto vendió en efectivo, con tarjeta y por transferencia.")
 punto("Los ingresos y egresos manuales que haya registrado.")
 punto("Cuánto efectivo debería haber en el cajón en este momento.")
 foto("Panel de resumen de caja con las ventas del día")
+
+tip(
+    "Si anula una venta pagada con tarjeta o transferencia, se descuenta de esas ventas y el "
+    "efectivo del cajón no cambia. Solo la anulación de una venta en efectivo aparece como "
+    "egreso, porque ahí sí sale plata del cajón."
+)
 
 h2("4.3  Movimientos manuales")
 texto(
@@ -571,17 +638,30 @@ tip(
 )
 foto("Recuadro de cobro mostrando el vuelto en verde")
 
+h3("Por qué el total puede cambiar según cómo pague")
+texto(
+    "Bajo el total aparece una línea chica que explica la diferencia cuando la hay: el IVA "
+    "sumado (si sus precios no lo incluyen) o el redondeo. Como el redondeo a $10 es solo "
+    "para efectivo, la misma compra puede costar $1.240 en efectivo y $1.235 con tarjeta. "
+    "No es un error."
+)
+
 h2("5.4  Después de cobrar")
 texto("Al confirmar la venta pasan tres cosas:")
 punto("Se descuenta el stock de los productos vendidos.")
 punto("Si tiene impresora configurada, sale el ticket automáticamente.")
-punto("Aparece el recibo en pantalla, con el folio de la venta.")
+punto("Aparece el comprobante en pantalla, con el folio y la fecha de la venta.")
+punto(
+    "Con el botón 📄 PDF lo guarda como archivo, por ejemplo para mandarlo por WhatsApp o "
+    "correo, o si no tiene impresora."
+)
 
 texto(
     "El folio es el número que identifica la venta, con el formato VTA-20260820-0001. "
     "Se reinicia cada día y nunca se repite."
 )
-foto("Recibo en pantalla después de cobrar")
+foto("Comprobante en pantalla después de cobrar, con el botón 📄 PDF")
+foto("Comprobante guardado en PDF")
 
 h2("5.5  Atajos de teclado")
 texto("Para trabajar rápido sin soltar el teclado:")
@@ -620,9 +700,19 @@ foto("Módulo Ventas / Reportes: vista general")
 
 h2("6.1  Historial de ventas")
 texto(
-    "La lista de todas sus ventas, de la más nueva a la más vieja. Puede filtrar por fecha "
-    "con los botones Hoy, Esta Semana y Este Mes, o elegir un rango."
+    "La lista de todas sus ventas, de la más nueva a la más vieja. Arriba están los filtros:"
 )
+punto(
+    "Fechas — los botones Hoy, Esta Semana, Este Mes y Este Año llegan siempre hasta hoy. "
+    "También puede elegir un rango con los calendarios Desde y Hasta."
+)
+punto("Método — muestra solo efectivo, tarjeta o transferencia. Se actualiza al elegirlo.")
+punto("Folio — escriba el número de una venta y presione Enter.")
+tip(
+    "El folio se busca dentro de las fechas elegidas. Si no lo encuentra, presione «Limpiar "
+    "Filtros» y vuelva a buscarlo."
+)
+foto("Filtros de fecha, método y folio")
 punto("Haga doble clic en una venta para ver el detalle de qué se vendió.")
 punto("Desde ahí también puede anular una venta, si se cobró por error.")
 
@@ -675,7 +765,28 @@ texto(
 )
 foto("Panel del Estado de Resultados")
 
-h2("6.3  Centro de Descargas")
+h2("6.3  Análisis Visual")
+texto(
+    "En la pestaña 📈 Análisis Visual ve el período elegido en gráficos, para entender de "
+    "un vistazo cómo le fue."
+)
+punto(
+    "Tarjetas de arriba — ingresos, cantidad de ventas y ticket promedio, comparados con el "
+    "período anterior (▲ subió, ▼ bajó). El mes en curso se compara con los mismos días del "
+    "mes anterior: del 1 al 20 de octubre contra el 1 al 20 de septiembre."
+)
+punto("Ventas por día — una barra por día y una línea con el promedio diario.")
+punto("¿A qué hora se vende más? — ventas por hora; la hora pico aparece destacada.")
+punto("Medios de pago — cuánto entró en efectivo, tarjeta y transferencia, con su porcentaje.")
+punto("Productos y categorías que más venden — los 5 primeros según lo que vendieron en plata.")
+tip(
+    "Use la hora pico para decidir cuándo reforzar la caja, y el ranking para saber qué "
+    "productos no le pueden faltar."
+)
+foto("Análisis Visual: tarjetas y gráfico de ventas por día")
+foto("Análisis Visual: horas, medios de pago y rankings")
+
+h2("6.4  Centro de Descargas")
 texto(
     "Sirve para bajar sus datos a Excel, para el contador o para guardarlos aparte. Se abre "
     "con el botón 📥 Centro de Descargas."
@@ -899,7 +1010,8 @@ h2("No imprime el ticket")
 punto("Revise que la impresora esté encendida, con papel y instalada en Windows.")
 punto("Revise que esté seleccionada en Configuración → Empresa.")
 punto("La venta igual quedó registrada: la impresión nunca frena una venta.")
-punto("Desde el recibo en pantalla hay un botón 🖨 para reintentar.")
+punto("Desde el comprobante en pantalla hay un botón 🖨 para reintentar.")
+punto("Si no tiene impresora a mano, guarde el comprobante con el botón 📄 PDF.")
 
 h2("Me equivoqué al elegir productos o servicios")
 texto(
@@ -910,7 +1022,9 @@ texto(
 h2("Vendí algo por error")
 texto(
     "Vaya a Ventas / Reportes, busque la venta en el historial, ábrala y anúlela. El stock "
-    "vuelve solo y la venta deja de contar en los reportes."
+    "vuelve solo y la venta deja de contar en los reportes. Si se pagó con tarjeta o "
+    "transferencia, la devolución al cliente se hace por ese medio: el efectivo de la caja "
+    "no cambia."
 )
 
 h2("Windows dice que el programa es peligroso")
@@ -933,6 +1047,7 @@ tabla(
     [
         ["Arqueo", "Contar la plata real del cajón y compararla con la que debería haber"],
         ["Activo fijo", "Algo que compró para usar por años: una máquina, un mueble, una vitrina"],
+        ["Comprobante", "Lo que recibe el cliente, impreso o en PDF. Es interno: no reemplaza a la boleta del SII"],
         ["Costo de ventas", "Lo que a usted le costaron los productos que efectivamente vendió"],
         ["Cuenta contable", "La categoría de un gasto: arriendo, luz, sueldos, publicidad"],
         ["Folio", "El número único que identifica cada venta"],

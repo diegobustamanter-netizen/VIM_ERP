@@ -365,7 +365,7 @@ class POSInterfazMixin:
     # ============================================================
 
     def crear_panel_resumen(self, parent):
-        total_frame = tk.Frame(parent, bg="#002b5c", height=escalar(100))
+        total_frame = tk.Frame(parent, bg="#002b5c", height=escalar(118))
         total_frame.pack(fill="x")
         total_frame.pack_propagate(False)
 
@@ -378,7 +378,15 @@ class POSInterfazMixin:
             total_frame, text="$ 0",
             font=("Segoe UI", escalar_fuente(30, minimo=22, maximo=32), "bold"), fg=COLOR_BLANCO, bg="#002b5c"
         )
-        self.lbl_total.pack(pady=(0, escalar(5)))
+        self.lbl_total.pack(pady=(0, 0))
+
+        # Neto + IVA (precios sin IVA) o redondeo: el cajero ve por qué el
+        # total no es la suma de las líneas.
+        self.lbl_desglose = tk.Label(
+            total_frame, text="", font=("Segoe UI", escalar_fuente(9)),
+            fg="#8ab4f8", bg="#002b5c"
+        )
+        self.lbl_desglose.pack(pady=(0, escalar(4)))
 
 
         pago_section = tk.Frame(parent, bg=COLOR_BLANCO)

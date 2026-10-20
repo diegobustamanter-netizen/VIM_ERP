@@ -15,6 +15,7 @@ import tkinter as tk
 from tkinter import messagebox
 from PIL import Image, ImageTk
 from config import LOGO_PATH, ICO_PATH, COLOR_PRIMARIO, COLOR_SECUNDARIO, COLOR_BLANCO, COLOR_GRIS
+from vim_logger import get_logger
 
 from database import inicializar_db, obtener_caja_abierta, cerrar_caja, obtener_resumen_caja
 from modulos.productos import abrir_modulo_productos
@@ -206,25 +207,106 @@ def fade_in(widget, alpha=0, speed=12, step=0.06):
         pass
 
 
+def _pintar_png_con_transparencia(ventana, img_rgba, x, y):
+    """
+    Dibuja un PNG con su transparencia real (bordes suaves incluidos) como
+    ventana flotante en Windows, usando UpdateLayeredWindow. Tk por sí solo
+    solo sabe hacer transparente UN color, lo que deja los bordes dentados.
+    Lanza una excepción si no se puede (otro sistema, error de Windows).
+    """
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    gdi32 = ctypes.windll.gdi32
+    user32.GetDC.restype = wintypes.HDC
+    user32.GetDC.argtypes = [wintypes.HWND]
+    user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
+    gdi32.CreateCompatibleDC.restype = wintypes.HDC
+    gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
+    gdi32.CreateDIBSection.restype = wintypes.HBITMAP
+    gdi32.CreateDIBSection.argtypes = [wintypes.HDC, ctypes.c_void_p, wintypes.UINT,
+                                       ctypes.POINTER(ctypes.c_void_p), wintypes.HANDLE, wintypes.DWORD]
+    gdi32.SelectObject.restype = wintypes.HGDIOBJ
+    gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
+    gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
+    gdi32.DeleteDC.argtypes = [wintypes.HDC]
+    user32.GetWindowLongW.restype = ctypes.c_long
+    user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_long]
+
+    class BITMAPINFOHEADER(ctypes.Structure):
+        _fields_ = [("biSize", wintypes.DWORD), ("biWidth", ctypes.c_long), ("biHeight", ctypes.c_long),
+                    ("biPlanes", wintypes.WORD), ("biBitCount", wintypes.WORD), ("biCompression", wintypes.DWORD),
+                    ("biSizeImage", wintypes.DWORD), ("biXPelsPerMeter", ctypes.c_long),
+                    ("biYPelsPerMeter", ctypes.c_long), ("biClrUsed", wintypes.DWORD), ("biClrImportant", wintypes.DWORD)]
+
+    class BLENDFUNCTION(ctypes.Structure):
+        _fields_ = [("BlendOp", ctypes.c_ubyte), ("BlendFlags", ctypes.c_ubyte),
+                    ("SourceConstantAlpha", ctypes.c_ubyte), ("AlphaFormat", ctypes.c_ubyte)]
+
+    user32.UpdateLayeredWindow.argtypes = [wintypes.HWND, wintypes.HDC, ctypes.POINTER(wintypes.POINT),
+                                           ctypes.POINTER(wintypes.SIZE), wintypes.HDC, ctypes.POINTER(wintypes.POINT),
+                                           wintypes.COLORREF, ctypes.POINTER(BLENDFUNCTION), wintypes.DWORD]
+
+    ventana.update_idletasks()
+    hwnd = int(ventana.wm_frame(), 16)
+
+    # Activar el modo "capa" desde cero: si antes se usó -alpha o
+    # -transparentcolor, UpdateLayeredWindow fallaría.
+    GWL_EXSTYLE, WS_EX_LAYERED = -20, 0x00080000
+    estilo = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+    user32.SetWindowLongW(hwnd, GWL_EXSTYLE, estilo & ~WS_EX_LAYERED)
+    user32.SetWindowLongW(hwnd, GWL_EXSTYLE, estilo | WS_EX_LAYERED)
+
+    # Windows espera BGRA con el color ya multiplicado por la transparencia
+    from PIL import ImageChops
+    r, g, b, a = img_rgba.split()
+    datos = Image.merge("RGBA", (ImageChops.multiply(b, a), ImageChops.multiply(g, a),
+                                 ImageChops.multiply(r, a), a)).tobytes()
+    ancho, alto = img_rgba.size
+
+    cabecera = BITMAPINFOHEADER()
+    cabecera.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+    cabecera.biWidth, cabecera.biHeight = ancho, -alto  # negativo: filas de arriba hacia abajo
+    cabecera.biPlanes, cabecera.biBitCount = 1, 32
+
+    dc_pantalla = user32.GetDC(None)
+    dc_mem = gdi32.CreateCompatibleDC(dc_pantalla)
+    bits = ctypes.c_void_p()
+    bitmap = gdi32.CreateDIBSection(dc_pantalla, ctypes.byref(cabecera), 0, ctypes.byref(bits), None, 0)
+    try:
+        if not bitmap or not bits.value:
+            raise OSError("CreateDIBSection falló")
+        ctypes.memmove(bits, datos, len(datos))
+        anterior = gdi32.SelectObject(dc_mem, bitmap)
+        mezcla = BLENDFUNCTION(0, 0, 255, 1)  # AC_SRC_OVER, AC_SRC_ALPHA
+        ok = user32.UpdateLayeredWindow(
+            hwnd, dc_pantalla, ctypes.byref(wintypes.POINT(x, y)), ctypes.byref(wintypes.SIZE(ancho, alto)),
+            dc_mem, ctypes.byref(wintypes.POINT(0, 0)), 0, ctypes.byref(mezcla), 2,  # ULW_ALPHA
+        )
+        gdi32.SelectObject(dc_mem, anterior)
+        if not ok:
+            raise ctypes.WinError()
+    finally:
+        if bitmap:
+            gdi32.DeleteObject(bitmap)
+        gdi32.DeleteDC(dc_mem)
+        user32.ReleaseDC(None, dc_pantalla)
+
+
 class VentanaSplash:
-    """Splash de carga que aparece antes del login."""
+    """Splash de carga que aparece antes del login: el logo flotando solo."""
     def __init__(self, parent):
         import time as _time
+        from ui_scale import escalar
         self.parent = parent
         self._start_time = _time.time()
         self.top = tk.Toplevel(parent)
         self.top.withdraw()  # Ocultar hasta posicionar
         self.top.overrideredirect(True)
-        # Fondo blanco con un borde fino gris azulado: se ve limpio y el logo
-        # (azul oscuro, transparente) resalta sin recuadros ni fondos oscuros.
-        self.top.configure(bg="#d5dde8")
         aplicar_icono(self.top)
 
-        from ui_scale import escalar
-        contenedor = tk.Frame(self.top, bg=COLOR_BLANCO)
-        contenedor.pack(fill="both", expand=True, padx=1, pady=1)
-
-        logo_listo = False
+        self._logo = None
         if os.path.exists(LOGO_PATH):
             try:
                 img = Image.open(LOGO_PATH).convert("RGBA")
@@ -232,63 +314,100 @@ class VentanaSplash:
                 caja = img.getchannel("A").point(lambda v: 255 if v > 20 else 0).getbbox()
                 if caja:
                     img = img.crop(caja)
-                ancho_logo = escalar(340)
+                ancho_logo = escalar(420)
                 alto_logo = max(1, int(img.height * ancho_logo / img.width))
-                img = img.resize((ancho_logo, alto_logo), Image.Resampling.LANCZOS)
-                self._logo_img = ImageTk.PhotoImage(img)  # referencia para que no se libere
-                tk.Label(contenedor, image=self._logo_img, bg=COLOR_BLANCO).pack(pady=(escalar(52), 0))
-                logo_listo = True
+                self._logo = img.resize((ancho_logo, alto_logo), Image.Resampling.LANCZOS)
             except Exception:
-                from vim_logger import get_logger
                 get_logger("splash").exception("No se pudo cargar el logo del splash")
-        if not logo_listo:
-            tk.Label(
-                contenedor, text="VIM ERP", bg=COLOR_BLANCO, fg=COLOR_PRIMARIO,
-                font=("Segoe UI", escalar_fuente(30), "bold"),
-            ).pack(pady=(escalar(52), 0))
 
-        # Línea de acento corta y centrada
-        tk.Frame(contenedor, bg=COLOR_PRIMARIO, height=3, width=escalar(56)).pack(pady=(escalar(26), escalar(16)))
-
-        tk.Label(
-            contenedor,
-            text="Iniciando sistema...",
-            bg=COLOR_BLANCO,
-            fg="#475569",
-            font=("Segoe UI", escalar_fuente(12), "bold"),
-        ).pack()
-        tk.Label(
-            contenedor,
-            text="Preparando el sistema",
-            bg=COLOR_BLANCO,
-            fg="#94a3b8",
-            font=("Segoe UI", escalar_fuente(9)),
-        ).pack(pady=(4, 0))
+        if self._logo is not None:
+            self._ancho, self._alto = self._logo.size
+        else:
+            self._construir_recuadro()
+            self._ancho, self._alto = escalar(480), escalar(280)
 
         # Centrar en el monitor donde está el parent, no solo el primario
-        from ui_scale import escalar, obtener_metricas_monitor
-        ancho_splash, alto_splash = escalar(480), escalar(280)
-        self.top.update_idletasks()
+        from ui_scale import obtener_metricas_monitor
         try:
             metricas = obtener_metricas_monitor(self.parent)
-            sx = metricas["x"] + (metricas["width"] // 2) - (ancho_splash // 2)
-            sy = metricas["y"] + (metricas["height"] // 2) - (alto_splash // 2)
+            sx = metricas["x"] + (metricas["width"] // 2) - (self._ancho // 2)
+            sy = metricas["y"] + (metricas["height"] // 2) - (self._alto // 2)
         except Exception:
-            sx = (self.top.winfo_screenwidth() // 2) - (ancho_splash // 2)
-            sy = (self.top.winfo_screenheight() // 2) - (alto_splash // 2)
-        self.top.geometry(f"{ancho_splash}x{alto_splash}+{max(0,sx)}+{max(0,sy)}")
+            sx = (self.top.winfo_screenwidth() // 2) - (self._ancho // 2)
+            sy = (self.top.winfo_screenheight() // 2) - (self._alto // 2)
+        self._x, self._y = max(0, sx), max(0, sy)
+        self.top.geometry(f"{self._ancho}x{self._alto}+{self._x}+{self._y}")
+
+    def _construir_recuadro(self):
+        """Respaldo sin logo: recuadro blanco con el nombre."""
+        from ui_scale import escalar
+        self.top.configure(bg="#d5dde8")
+        contenedor = tk.Frame(self.top, bg=COLOR_BLANCO)
+        contenedor.pack(fill="both", expand=True, padx=1, pady=1)
+        tk.Label(
+            contenedor, text="VIM ERP", bg=COLOR_BLANCO, fg=COLOR_PRIMARIO,
+            font=("Segoe UI", escalar_fuente(30), "bold"),
+        ).pack(pady=(escalar(52), 0))
+        tk.Frame(contenedor, bg=COLOR_PRIMARIO, height=3, width=escalar(56)).pack(pady=(escalar(26), escalar(16)))
+        tk.Label(
+            contenedor, text="Iniciando sistema...", bg=COLOR_BLANCO, fg="#475569",
+            font=("Segoe UI", escalar_fuente(12), "bold"),
+        ).pack()
+
+    def _logo_con_color_llave(self):
+        """
+        Respaldo si falla la transparencia real: Tk vuelve transparente un
+        solo color. Los bordes suaves se mezclan con blanco (si se mezclaran
+        con el color llave quedaría un halo rosado), así que se ven algo
+        menos finos.
+        """
+        COLOR_LLAVE = "#ff00fe"
+        self.top.attributes("-transparentcolor", COLOR_LLAVE)
+        alfa = self._logo.getchannel("A")
+        fondo = Image.new("RGBA", self._logo.size, (255, 255, 255, 255))
+        img = Image.alpha_composite(fondo, self._logo).convert("RGB")
+        img = Image.composite(img, Image.new("RGB", img.size, COLOR_LLAVE),
+                              alfa.point(lambda v: 255 if v >= 110 else 0))
+        self._logo_img = ImageTk.PhotoImage(img)  # referencia para que no se libere
+        self.top.configure(bg=COLOR_LLAVE)
+        tk.Label(self.top, image=self._logo_img, bg=COLOR_LLAVE, bd=0).pack()
 
     def mostrar(self):
-        self.top.deiconify()
+        if self._logo is not None:
+            # Mostrar invisible, pintar el logo con su transparencia real y
+            # recién ahí se ve: así no aparece un cuadro gris por un instante.
+            try:
+                self.top.attributes("-alpha", 0)
+            except tk.TclError:
+                pass
+            self.top.deiconify()
+            try:
+                _pintar_png_con_transparencia(self.top, self._logo, self._x, self._y)
+            except Exception:
+                get_logger("splash").warning("Logo con transparencia real no disponible; se usa color llave", exc_info=True)
+                try:
+                    self._logo_con_color_llave()
+                except Exception:
+                    for hijo in self.top.winfo_children():
+                        hijo.destroy()
+                    self._construir_recuadro()
+                    self._ancho, self._alto = escalar(480), escalar(280)
+                    self.top.geometry(f"{self._ancho}x{self._alto}+{self._x}+{self._y}")
+                try:
+                    self.top.attributes("-alpha", 1)
+                except tk.TclError:
+                    pass
+        else:
+            self.top.deiconify()
         self.top.lift()
         self.top.focus_force()
         self.top.update()  # update() completo para que se pinte de verdad
 
     def cerrar(self):
-        """Cierra el splash, garantizando un mínimo de 1.2s de visibilidad."""
+        """Cierra el splash, garantizando un mínimo de 1.5s de visibilidad."""
         import time as _time
         try:
-            restante = 1.2 - (_time.time() - self._start_time)
+            restante = 1.5 - (_time.time() - self._start_time)
             if restante > 0:
                 self.top.after(int(restante * 1000), lambda: None)
                 self.top.update()
@@ -962,6 +1081,13 @@ if __name__ == "__main__":
     root.title("VIM ERP - Sistema de Gestión")
     root.configure(bg=COLOR_GRIS)
 
+    # Tema visual de las tablas, listas y combos (ttk) para TODA la app.
+    # Antes solo lo activaba la ventana de Historial de productos: al abrirla
+    # cambiaba el aspecto de todo el programa (encabezados de color, altos de
+    # fila) y al reiniciar volvía al tema de Windows, que ignora esos estilos.
+    from tkinter import ttk
+    ttk.Style(root).theme_use("default")
+
     # Establecer el icono de la ventana (barra de titulo, taskbar, Alt-Tab)
     aplicar_icono(root)
 
@@ -1016,14 +1142,15 @@ if __name__ == "__main__":
     root.bind_class("Entry", "<FocusIn>", on_global_focus_in)
     root.bind_class("Entry", "<FocusOut>", on_global_focus_out)
 
-    # Construir el login MIENTRAS el splash sigue visible
-    # VentanaLogin hace withdraw+deiconify internamente, así que
-    # primero lo creamos y luego cerramos el splash para una
-    # transición splash → login sin cuadro blanco intermedio.
-    login = VentanaLogin(root, mostrar_menu_principal)
+    # Construir el login OCULTO mientras el splash sigue visible.
+    # Antes el login se mostraba apenas se creaba y tapaba el splash casi
+    # al instante, así que el logo de carga no se alcanzaba a ver.
+    login = VentanaLogin(root, mostrar_menu_principal, mostrar=False)
 
-    # Cerrar splash DESPUÉS de que el login ya esté listo y visible
+    # Cerrar el splash (tras su tiempo mínimo) y recién ahí mostrar el login,
+    # que ya está construido: la transición es inmediata, sin cuadro blanco.
     splash.cerrar()
+    login.mostrar()
 
     aplicar_barra_windows_azul(root, COLOR_PRIMARIO, COLOR_BLANCO)
 

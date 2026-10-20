@@ -7,11 +7,43 @@ from .ventas_ui import construir_interfaz
 from database.ventas import buscar_ventas_filtradas, contar_ventas_filtradas, obtener_kpis_ventas, obtener_venta_por_id, obtener_reportes_avanzados
 from database.reportes_financieros import obtener_estado_resultados, obtener_resumen_balance_general
 from datetime import date, timedelta
-import calendar
 from ui_scale import escalar, escalar_fuente
 from config import COLOR_PRIMARIO, COLOR_BLANCO, COLOR_PELIGRO
 from modulos.utils_globales import aplicar_barra_windows_azul, centrar_ventana_mejorado, preparar_modal_scrollable
 from vim_logger import get_logger
+
+
+def rango_rapido(tipo, hoy):
+    """
+    Fechas de los botones Hoy / Semana / Mes / Año del panel de Reportes.
+    Terminan HOY, no al final de la semana/mes/año: antes "Este mes"
+    llegaba hasta el 31, así que los gráficos mostraban días futuros vacíos
+    y la comparación con el período anterior medía distinta cantidad de días.
+    """
+    if tipo == "semana":
+        return hoy - timedelta(days=hoy.weekday()), hoy
+    if tipo == "mes":
+        return hoy.replace(day=1), hoy
+    if tipo == "anio":
+        return hoy.replace(month=1, day=1), hoy
+    return hoy, hoy
+
+
+def rango_de_atajo(clave, hoy, minimo=None):
+    """Fechas (desde, hasta) de los atajos del Centro de Descargas."""
+    if clave == "hoy":
+        return hoy, hoy
+    if clave == "ayer":
+        ayer = hoy - timedelta(days=1)
+        return ayer, ayer
+    if clave == "semana":
+        return hoy - timedelta(days=hoy.weekday()), hoy
+    if clave == "mes":
+        return hoy.replace(day=1), hoy
+    if clave == "mes_pasado":
+        fin = hoy.replace(day=1) - timedelta(days=1)
+        return fin.replace(day=1), fin
+    return minimo or date(2000, 1, 1), hoy      # "todo"
 
 
 class ModuloVentasReportes:
@@ -178,26 +210,9 @@ class ModuloVentasReportes:
             self.btn_filtro_activo.config(bg="#e9ecef", fg="#333")
             self.btn_filtro_activo = None
 
-        btn = None
-        hoy = date.today()
-        if tipo == "hoy":
-            desde = hoy
-            hasta = hoy
-            btn = getattr(self, 'btn_hoy', None)
-        elif tipo == "semana":
-            desde = hoy - timedelta(days=hoy.weekday())
-            hasta = desde + timedelta(days=6)
-            btn = getattr(self, 'btn_semana', None)
-        elif tipo == "mes":
-            desde = hoy.replace(day=1)
-            _, ultimo_dia = calendar.monthrange(hoy.year, hoy.month)
-            hasta = hoy.replace(day=ultimo_dia)
-            btn = getattr(self, 'btn_mes', None)
-        elif tipo == "anio":
-            desde = hoy.replace(month=1, day=1)
-            hasta = hoy.replace(month=12, day=31)
-            btn = getattr(self, 'btn_anio', None)
-            
+        desde, hasta = rango_rapido(tipo, date.today())
+        btn = getattr(self, f'btn_{tipo}', None)
+
         if btn:
             btn.config(bg="#17a2b8", fg="white")
             self.btn_filtro_activo = btn
@@ -502,7 +517,7 @@ class ModuloVentasReportes:
                         f"Generado: {meta_fecha}  |  Productos activos con valoración",
                         11)
                     cabs3 = ["Nombre", "Categoría", "Tipo Ítem", "Tipo Venta", "Stock",
-                             "Stock Mín.", "Precio Compra", "Precio Venta",
+                             "Stock Mín.", "Precio Compra", "Precio Venta (por kg si es a granel)",
                              "Valor Costo Total", "Valor Venta Total", "Proveedor"]
                     keys3 = ["nombre", "categoria", "tipo_item", "tipo_venta", "stock",
                              "stock_minimo", "precio_compra", "precio_venta",
@@ -514,11 +529,16 @@ class ModuloVentasReportes:
                                COALESCE(c.nombre, 'Sin categoria') as categoria,
                                COALESCE(p.tipo_item, 'producto') as tipo_item,
                                p.tipo_venta, p.stock, p.stock_minimo,
-                               p.precio_compra, p.precio_venta,
+                               p.precio_compra,
+                               -- Los productos a granel se venden por kilo: su
+                               -- precio_venta es 0 y el valor salía en $0.
+                               CASE WHEN p.tipo_venta = 'peso' THEN p.precio_por_kilo
+                                    ELSE p.precio_venta END as precio_venta,
                                CASE WHEN COALESCE(p.tipo_item,'producto') != 'servicio'
                                     THEN ROUND(p.stock * p.precio_compra, 0) ELSE 0 END as valor_costo_total,
-                               CASE WHEN COALESCE(p.tipo_item,'producto') != 'servicio'
-                                    THEN ROUND(p.stock * p.precio_venta, 0) ELSE 0 END as valor_venta_total,
+                               CASE WHEN COALESCE(p.tipo_item,'producto') = 'servicio' THEN 0
+                                    WHEN p.tipo_venta = 'peso' THEN ROUND(p.stock * p.precio_por_kilo, 0)
+                                    ELSE ROUND(p.stock * p.precio_venta, 0) END as valor_venta_total,
                                COALESCE(prov.nombre, 'Sin proveedor') as proveedor
                         FROM productos p
                         LEFT JOIN categorias c ON p.categoria_id = c.id
@@ -636,8 +656,14 @@ class ModuloVentasReportes:
             return
 
         # get_date() retorna objeto date de Python → sin ambigüedad de formato
-        desde = self.entry_fecha_desde.get_date().strftime("%Y-%m-%d")
-        hasta = self.entry_fecha_hasta.get_date().strftime("%Y-%m-%d")
+        d_desde, d_hasta = self.entry_fecha_desde.get_date(), self.entry_fecha_hasta.get_date()
+        if d_desde > d_hasta:
+            # Antes buscaba igual y mostraba "sin resultados" sin decir por qué
+            messagebox.showwarning("Fechas", "La fecha 'Desde' no puede ser posterior a 'Hasta'.",
+                                   parent=self.root)
+            return
+        desde = d_desde.strftime("%Y-%m-%d")
+        hasta = d_hasta.strftime("%Y-%m-%d")
         folio = self.entry_folio.get().strip()
         metodo = self.combo_metodo.get()
 
@@ -672,6 +698,16 @@ class ModuloVentasReportes:
             total = contar_ventas_filtradas(desde, hasta, metodo, folio)
             reportes = obtener_reportes_avanzados(desde, hasta, metodo, folio)
             kpis = obtener_kpis_ventas(desde, hasta, metodo, folio)
+            # Mismo largo de período, justo antes, para comparar en los KPIs
+            kpis_prev = None
+            try:
+                from .graficos import periodo_anterior
+                previo = periodo_anterior(desde, hasta)
+                if previo:
+                    kpis_prev = obtener_kpis_ventas(previo[0], previo[1], metodo, folio)
+            except Exception:
+                get_logger("ventas_reportes").warning("No se pudo calcular el período anterior", exc_info=True)
+            self.kpis_previos = kpis_prev
             # Finanzas TAMBIÉN en el worker: antes se consultaban en el hilo
             # de la UI (refrescar_finanzas) y congelaban la pantalla.
             finanzas = self._obtener_finanzas_worker(desde, hasta)
@@ -838,7 +874,7 @@ class ModuloVentasReportes:
             get_logger("ventas_reportes").exception("Falló la preparación de gráficos de ventas")  # Silently ignore errors
 
     def _generar_graficos_deferred(self):
-        """Genera el dashboard visual (KPIs + 4 gráficos) tras un diferimiento."""
+        """Genera el dashboard visual (KPIs + gráficos) tras un diferimiento."""
         try:
             if not hasattr(self, 'root') or not self.root or not self.root.winfo_exists():
                 return
@@ -849,13 +885,11 @@ class ModuloVentasReportes:
 
         reportes = self.reportes_actuales
         kpis = self.kpis_actuales
+        kpis_prev = getattr(self, "kpis_previos", None) or {}
 
         try:
-            import matplotlib
-            matplotlib.use("TkAgg")
-            import matplotlib.pyplot as plt
             from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-            from matplotlib.ticker import FuncFormatter
+            from . import graficos as g
         except ImportError:
             self._mostrar_placeholder_graficos("Error: No se pudo cargar matplotlib")
             return
@@ -874,33 +908,17 @@ class ModuloVentasReportes:
             except Exception:
                 pass
 
-            plt.close('all')
-
-            # ── Paleta y estilo global ───────────────────────────
             C_BG = "#f8fafc"; C_CARD = "#ffffff"; C_BORDE = "#e2e8f0"
-            C_TXT = "#1e293b"; C_MUTED = "#64748b"
-            C_INDIGO = "#4f46e5"; C_EMERALD = "#10b981"; C_AMBER = "#f59e0b"
-            C_ROSE = "#f43f5e"; C_SKY = "#0ea5e9"; C_VIOLET = "#8b5cf6"
-
-            plt.rcParams.update({
-                'font.family': 'sans-serif',
-                'font.sans-serif': ['Segoe UI', 'Roboto', 'Arial'],
-                'axes.edgecolor': C_BORDE, 'axes.labelcolor': C_MUTED,
-                'xtick.color': C_MUTED, 'ytick.color': C_MUTED,
-                'text.color': C_TXT, 'axes.grid': True,
-                'grid.color': '#f1f5f9', 'grid.linestyle': '--',
-                'figure.facecolor': C_CARD, 'axes.facecolor': C_CARD,
-            })
-
-            def fmt_moneda_corta(x, pos=None):
-                if x >= 1e6: return f'${x*1e-6:.1f}M'
-                if x >= 1e3: return f'${x*1e-3:.0f}K'
-                return f'${x:,.0f}'
+            C_TXT = g.TINTA; C_MUTED = "#64748b"
+            C_SUBE = "#006300"; C_BAJA = "#d03b3b"
+            # Figuras al mismo DPI que la escala de la app: nítidas en
+            # pantallas con zoom de Windows (125 %, 150 %).
+            DPI = max(72, round(96 * escalar(100) / 100))
 
             main = tk.Frame(self.frame_graficos, bg=C_BG)
             main.pack(fill="both", expand=True, padx=escalar(16), pady=escalar(14))
 
-            # ── Encabezado del dashboard ─────────────────────────
+            # ── Encabezado ────────────────────────────────────────
             desde = self._ultimo_filtros.get("fecha_desde", "")
             hasta = self._ultimo_filtros.get("fecha_hasta", "")
             head = tk.Frame(main, bg=C_BG)
@@ -911,158 +929,96 @@ class ModuloVentasReportes:
                 tk.Label(head, text=f"  {self._formatear_fecha_display(desde)}  →  {self._formatear_fecha_display(hasta)}",
                          font=("Segoe UI", escalar_fuente(10)), bg=C_BG, fg=C_MUTED).pack(side="left", pady=(4, 0))
 
-            # ── Datos de KPIs (usando las claves REALES del backend) ──
+            # ── KPIs con comparación contra el período anterior ──
             total_ingresos = float(kpis.get("ventas_totales", 0))
             transacciones = int(kpis.get("cantidad_ventas", 0))
             ticket_prom = float(kpis.get("ticket_promedio", 0))
             utilidad = float(kpis.get("utilidad_total", 0))
             margen = (utilidad / total_ingresos * 100) if total_ingresos > 0 else 0
 
-            pico_txt = "—"
-            if reportes.get("ventas_por_hora"):
-                mx = max(reportes["ventas_por_hora"], key=lambda x: int(x["tickets"]))
-                pico_txt = f"Pico {mx['hora']} · {int(mx['tickets'])} tickets"
-
-            # ── Fila de tarjetas KPI ─────────────────────────────
             fila_kpi = tk.Frame(main, bg=C_BG)
             fila_kpi.pack(fill="x", pady=(0, escalar(10)))
             for i in range(4):
                 fila_kpi.grid_columnconfigure(i, weight=1, uniform="kpi")
 
-            def _kpi_card(col, titulo, valor, color, subtitulo=""):
+            def _kpi_card(col, titulo, valor, cambio=None, detalle=""):
                 card = tk.Frame(fila_kpi, bg=C_CARD, highlightbackground=C_BORDE, highlightthickness=1)
-                card.grid(row=0, column=col, sticky="nsew",
-                          padx=(0 if col == 0 else escalar(8), 0))
-                tk.Frame(card, bg=color, height=escalar(4)).pack(fill="x")
-                tk.Label(card, text=titulo.upper(), font=("Segoe UI", escalar_fuente(8), "bold"),
-                         bg=C_CARD, fg=C_MUTED).pack(pady=(escalar(10), 0))
+                card.grid(row=0, column=col, sticky="nsew", padx=(0 if col == 0 else escalar(8), 0))
+                tk.Label(card, text=titulo, font=("Segoe UI", escalar_fuente(9)),
+                         bg=C_CARD, fg=C_MUTED, anchor="w").pack(fill="x", padx=escalar(14), pady=(escalar(12), 0))
                 tk.Label(card, text=valor, font=("Segoe UI", escalar_fuente(19), "bold"),
-                         bg=C_CARD, fg=color).pack(pady=(escalar(2), 0))
-                tk.Label(card, text=subtitulo or " ", font=("Segoe UI", escalar_fuente(8)),
-                         bg=C_CARD, fg=C_MUTED).pack(pady=(0, escalar(10)))
+                         bg=C_CARD, fg=C_TXT, anchor="w").pack(fill="x", padx=escalar(14))
+                if cambio is not None:
+                    # Flecha + texto: el color nunca es la única señal
+                    sube = cambio >= 0
+                    texto = f"{'▲' if sube else '▼'} {abs(cambio):.0f}% vs período anterior"
+                    color = C_SUBE if sube else C_BAJA
+                else:
+                    texto, color = detalle or "Sin datos del período anterior", C_MUTED
+                tk.Label(card, text=texto, font=("Segoe UI", escalar_fuente(8)),
+                         bg=C_CARD, fg=color, anchor="w").pack(fill="x", padx=escalar(14), pady=(0, escalar(12)))
 
-            _kpi_card(0, "💰 Ingresos Totales", self.formatear_moneda(total_ingresos), C_INDIGO)
-            _kpi_card(1, "🎫 Ticket Promedio", self.formatear_moneda(ticket_prom),
-                      C_SKY, f"{transacciones} transacciones")
-            _kpi_card(2, "📈 Utilidad Bruta", self.formatear_moneda(utilidad),
-                      C_EMERALD, f"Margen {margen:.1f}%")
-            _kpi_card(3, "🔥 Actividad", str(transacciones), C_ROSE, pico_txt)
+            _kpi_card(0, "Ingresos", self.formatear_moneda(total_ingresos),
+                      g.variacion(total_ingresos, kpis_prev.get("ventas_totales")))
+            _kpi_card(1, "Ventas realizadas", g.miles(transacciones),
+                      g.variacion(transacciones, kpis_prev.get("cantidad_ventas")))
+            _kpi_card(2, "Ticket promedio", self.formatear_moneda(ticket_prom),
+                      g.variacion(ticket_prom, kpis_prev.get("ticket_promedio")))
+            _kpi_card(3, "Utilidad bruta", self.formatear_moneda(utilidad),
+                      detalle=f"Margen {margen:.1f}% de lo vendido".replace(".", ","))
 
-            # ── Tarjeta de gráfico (título Tk + figura sin título) ──
-            def _grafico_card(parent, col, titulo):
+            # ── Tarjetas de gráfico ───────────────────────────────
+            def _grafico_card(parent, col, titulo, subtitulo=""):
                 card = tk.Frame(parent, bg=C_CARD, highlightbackground=C_BORDE, highlightthickness=1)
-                card.grid(row=0, column=col, sticky="nsew",
-                          padx=(0 if col == 0 else escalar(8), 0))
+                card.grid(row=0, column=col, sticky="nsew", padx=(0 if col == 0 else escalar(8), 0))
                 tk.Label(card, text=titulo, font=("Segoe UI", escalar_fuente(10), "bold"),
-                         bg=C_CARD, fg=C_TXT, anchor="w").pack(fill="x", padx=escalar(14), pady=(escalar(10), 0))
-                tk.Frame(card, bg=C_BORDE, height=1).pack(fill="x", padx=escalar(14), pady=(escalar(6), 0))
+                         bg=C_CARD, fg=C_TXT, anchor="w").pack(fill="x", padx=escalar(14), pady=(escalar(12), 0))
+                if subtitulo:
+                    tk.Label(card, text=subtitulo, font=("Segoe UI", escalar_fuente(8)),
+                             bg=C_CARD, fg=C_MUTED, anchor="w").pack(fill="x", padx=escalar(14))
                 return card
 
             def _montar_figura(fig, card):
-                fig.tight_layout(pad=1.6)
+                fig.set_dpi(DPI)
                 canvas = FigureCanvasTkAgg(fig, master=card)
                 canvas.draw()
+                # La figura se ajusta sola al ancho de la tarjeta
                 canvas.get_tk_widget().pack(fill="both", expand=True, padx=escalar(8), pady=escalar(8))
 
-            FIGSIZE = (5.6, 3.2); DPI = 96
+            def _fila(pesos):
+                fila = tk.Frame(main, bg=C_BG)
+                fila.pack(fill="x", pady=(0, escalar(10)))
+                for i, w in enumerate(pesos):
+                    fila.grid_columnconfigure(i, weight=w, uniform=str(id(fila)))
+                return fila
 
-            # ── Fila 1: Demanda por hora + Mezcla de pagos ───────
-            fila1 = tk.Frame(main, bg=C_BG)
-            fila1.pack(fill="x", pady=(0, escalar(10)))
-            fila1.grid_columnconfigure(0, weight=3, uniform="g1")
-            fila1.grid_columnconfigure(1, weight=2, uniform="g1")
+            # Fila 1: ventas por día (solo si el período tiene más de un día)
+            if desde and hasta and desde != hasta:
+                fila = _fila([1])
+                card = _grafico_card(fila, 0, "Ventas por día",
+                                     "Ingresos de cada día. Los días sin barra no tuvieron ventas.")
+                _montar_figura(g.grafico_ventas_por_dia(reportes.get("ventas_por_dia", []), desde, hasta), card)
 
-            if reportes.get("ventas_por_hora"):
-                horas = [h["hora"] for h in reportes["ventas_por_hora"]]
-                tickets = [int(h["tickets"]) for h in reportes["ventas_por_hora"]]
-                card = _grafico_card(fila1, 0, "⏰ Demanda por Hora (tickets)")
-                fig, ax = plt.subplots(figsize=FIGSIZE, dpi=DPI)
-                ax.fill_between(range(len(horas)), tickets, color=C_SKY, alpha=0.15)
-                ax.plot(range(len(horas)), tickets, marker='o', color=C_SKY, linewidth=2.2,
-                        markersize=4.5, markerfacecolor='white', markeredgewidth=1.8)
-                prom = sum(tickets) / len(tickets) if tickets else 0
-                ax.axhline(y=prom, color=C_ROSE, linestyle='--', linewidth=1.6, alpha=0.7,
-                           label=f'Promedio: {prom:.1f}')
-                ax.set_xticks(range(len(horas)))
-                ax.set_xticklabels(horas, rotation=45, fontsize=7.5)
-                ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-                ax.grid(axis='y', alpha=0.3); ax.grid(axis='x', visible=False)
-                ax.legend(loc='upper left', fontsize=8, frameon=False)
-                _montar_figura(fig, card)
+            # Fila 2: horas + medios de pago
+            fila = _fila([3, 2])
+            card = _grafico_card(fila, 0, "¿A qué hora se vende más?", "Cantidad de ventas por hora; en azul fuerte, la hora pico.")
+            _montar_figura(g.grafico_ventas_por_hora(reportes.get("ventas_por_hora", [])), card)
+            card = _grafico_card(fila, 1, "Medios de pago", "Cuánto entró por cada medio.")
+            _montar_figura(g.grafico_medios_de_pago(kpis.get("total_efectivo", 0), kpis.get("total_tarjeta", 0),
+                                                    kpis.get("total_transferencia", 0)), card)
 
-            total_e = float(kpis.get("total_efectivo", 0))
-            total_t = float(kpis.get("total_tarjeta", 0))
-            total_tr = float(kpis.get("total_transferencia", 0))
-            metodos = [(n, v, c) for n, v, c in (
-                ("Efectivo", total_e, C_AMBER),
-                ("Tarjeta", total_t, C_INDIGO),
-                ("Transf.", total_tr, C_VIOLET),
-            ) if v > 0]
-
-            if metodos:
-                card = _grafico_card(fila1, 1, "💳 Mezcla de Ingresos por Método")
-                fig, ax = plt.subplots(figsize=(4.2, 3.2), dpi=DPI)
-                vals = [m[1] for m in metodos]
-                wedges, texts, autotexts = ax.pie(
-                    vals, labels=[m[0] for m in metodos], autopct='%1.1f%%',
-                    startangle=90, colors=[m[2] for m in metodos], pctdistance=0.78,
-                    wedgeprops={'width': 0.38, 'edgecolor': 'white', 'linewidth': 2}
-                )
-                plt.setp(autotexts, size=8.5, weight="bold", color="white")
-                plt.setp(texts, size=9)
-                # Total al centro de la dona
-                ax.text(0, 0, fmt_moneda_corta(sum(vals)), ha='center', va='center',
-                        fontsize=12, weight='bold', color=C_TXT)
-                _montar_figura(fig, card)
-
-            # ── Fila 2: Top productos + Ingresos por categoría ───
-            fila2 = tk.Frame(main, bg=C_BG)
-            fila2.pack(fill="x")
-            fila2.grid_columnconfigure(0, weight=1, uniform="g2")
-            fila2.grid_columnconfigure(1, weight=1, uniform="g2")
-
-            if reportes.get("top_productos"):
-                prods = [p["nombre_producto"][:20] for p in reportes["top_productos"][:5]]
-                unidades = [float(p["cantidad_total"]) for p in reportes["top_productos"][:5]]
-                if sum(unidades) > 0:
-                    card = _grafico_card(fila2, 0, "🏆 Top 5 Productos (unidades)")
-                    fig, ax = plt.subplots(figsize=FIGSIZE, dpi=DPI)
-                    colores = [C_EMERALD, C_SKY, C_INDIGO, C_VIOLET, C_AMBER]
-                    bars = ax.barh(prods[::-1], unidades[::-1],
-                                   color=colores[:len(unidades)][::-1], alpha=0.9, height=0.62)
-                    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-                    ax.spines['left'].set_visible(False)
-                    ax.grid(axis='x', alpha=0.2); ax.grid(axis='y', visible=False)
-                    ax.tick_params(axis='y', labelsize=8.5)
-                    for bar in bars:
-                        w = bar.get_width()
-                        ax.text(w + max(unidades) * 0.015, bar.get_y() + bar.get_height() / 2,
-                                f'{w:g}', va='center', fontsize=8.5, color=C_MUTED, weight='bold')
-                    _montar_figura(fig, card)
-
-            if reportes.get("top_categorias"):
-                cats = [c["categoria"][:15] for c in reportes["top_categorias"][:5]]
-                ingresos_c = [float(c["ingresos_totales"]) for c in reportes["top_categorias"][:5]]
-                if sum(ingresos_c) > 0:
-                    card = _grafico_card(fila2, 1, "🗂 Ingresos por Categoría")
-                    fig, ax = plt.subplots(figsize=FIGSIZE, dpi=DPI)
-                    colores = [C_INDIGO, C_VIOLET, C_SKY, C_EMERALD, C_AMBER]
-                    bars = ax.bar(range(len(cats)), ingresos_c,
-                                  color=colores[:len(cats)], alpha=0.9, width=0.55)
-                    ax.set_xticks(range(len(cats)))
-                    ax.set_xticklabels(cats, rotation=20, ha='right', fontsize=8.5)
-                    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-                    ax.yaxis.set_major_formatter(FuncFormatter(fmt_moneda_corta))
-                    ax.grid(axis='y', alpha=0.2); ax.grid(axis='x', visible=False)
-                    for bar in bars:
-                        h = bar.get_height()
-                        ax.text(bar.get_x() + bar.get_width() / 2, h + max(ingresos_c) * 0.015,
-                                fmt_moneda_corta(h), ha='center', va='bottom',
-                                fontsize=7.5, weight='bold', color=C_MUTED)
-                    _montar_figura(fig, card)
+            # Fila 3: rankings por ingresos
+            fila = _fila([1, 1])
+            prods = reportes.get("top_productos", [])
+            card = _grafico_card(fila, 0, "Productos que más venden", "Top 5 por ingresos.")
+            _montar_figura(g.grafico_ranking([p["nombre_producto"] for p in prods],
+                                             [p["ingresos_totales"] for p in prods]), card)
+            cats = reportes.get("top_categorias", [])
+            card = _grafico_card(fila, 1, "Categorías que más venden", "Top 5 por ingresos.")
+            _montar_figura(g.grafico_ranking([c["categoria"] for c in cats],
+                                             [c["ingresos_totales"] for c in cats]), card)
 
         except Exception as e:
-            from vim_logger import get_logger
             get_logger("ui.graficos").error(f"Error al generar gráficos: {e}", exc_info=True)
             self._mostrar_placeholder_graficos("Error al generar los gráficos. Intenta de nuevo.")
 
@@ -1347,7 +1303,7 @@ class ModuloVentasReportes:
             font=("Segoe UI", escalar_fuente(14), "bold"), fg=COLOR_BLANCO, bg=COLOR_PRIMARIO
         ).pack(anchor="w", padx=escalar(16), pady=(escalar(12), 0))
         tk.Label(
-            header, text="Elegí el período y el reporte",
+            header, text="Elige el período y el reporte",
             font=("Segoe UI", escalar_fuente(9)), fg="#a9c0dd", bg=COLOR_PRIMARIO
         ).pack(anchor="w", padx=escalar(16), pady=(0, escalar(12)))
 
@@ -1427,20 +1383,7 @@ class ModuloVentasReportes:
             _actualizar_vista_previa()
 
         def _rango(clave):
-            hoy = date.today()
-            if clave == "hoy":
-                return hoy, hoy
-            if clave == "ayer":
-                ayer = hoy - timedelta(days=1)
-                return ayer, ayer
-            if clave == "semana":
-                return hoy - timedelta(days=hoy.weekday()), hoy
-            if clave == "mes":
-                return hoy.replace(day=1), hoy
-            if clave == "mes_pasado":
-                fin = hoy.replace(day=1) - timedelta(days=1)
-                return fin.replace(day=1), fin
-            return _min or date(2000, 1, 1), hoy      # "todo"
+            return rango_de_atajo(clave, date.today(), _min)
 
         for indice, (etiqueta, clave) in enumerate((
                 ("Hoy", "hoy"), ("Ayer", "ayer"), ("Esta semana", "semana"),
@@ -1801,7 +1744,7 @@ class ModuloVentasReportes:
         ws2.append([])
         ws2.append(["INDICADORES:"])
         ws2.cell(ws2.max_row, 1).font = Font(name="Calibri", bold=True, size=9, color="666666")
-        add_line("  Punto de equilibrio (ventas necesarias)", pnl.get("punto_equilibrio", 0), False, None, "002060")
+        add_line("  Punto de equilibrio (ventas necesarias)", round(pnl.get("punto_equilibrio", 0) or 0), False, None, "002060")
 
         otros_ing = pnl.get("otros_ingresos_caja", 0)
         if otros_ing:

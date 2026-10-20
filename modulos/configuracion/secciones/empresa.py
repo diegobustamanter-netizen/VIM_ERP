@@ -57,7 +57,6 @@ class EmpresaSeccion:
             ("Dirección Física:", "ent_direccion", "direccion_empresa", 35),
             ("Teléfono Local:", "ent_telefono", "telefono_empresa", 20),
             ("Email Corporativo:", "ent_email", "email_empresa", 30),
-            ("Moneda Oficial (ej. CLP, USD):", "ent_moneda", "moneda", 10)
         ]
         
         for i, (label_text, attr_name, config_key, width) in enumerate(campos):
@@ -135,6 +134,10 @@ class EmpresaSeccion:
         self.cmb_impresora = ttk.Combobox(f_imp, state="readonly", width=24,
                                           font=("Segoe UI", escalar_fuente(9)))
         self.cmb_impresora.pack(side="left", fill="x", expand=True)
+        # La impresora se guarda apenas se elige. Antes solo se guardaba con
+        # el botón "Guardar Todos Los Cambios" del panel izquierdo, lejos de
+        # este combo: si no se apretaba, la elección se perdía.
+        self.cmb_impresora.bind("<<ComboboxSelected>>", lambda e: self._guardar_impresora())
 
         tk.Button(
             f_imp, text="🔄", bg="#e2e8f0", relief="flat", cursor="hand2",
@@ -151,6 +154,13 @@ class EmpresaSeccion:
             variable=self.var_impresion_auto, bg="white", font=("Segoe UI", escalar_fuente(8))
         ).pack(side="left")
         f_imp2.pack(fill="x")
+
+        # Sin impresora térmica igual se puede ver cómo queda el comprobante
+        tk.Button(
+            f_imp2, text="📄 Vista previa", bg="#64748b", fg="white", cursor="hand2",
+            relief="flat", font=("Segoe UI", escalar_fuente(8), "bold"),
+            command=self._vista_previa_pdf
+        ).pack(side="right", padx=(4, 0))
 
         tk.Button(
             f_imp2, text="🖨 Imprimir prueba", bg="#0ea5e9", fg="white", cursor="hand2",
@@ -243,6 +253,41 @@ class EmpresaSeccion:
         else:
             self.cmb_impresora.set("(Sin impresora)")
 
+    def _vista_previa_pdf(self):
+        """Abre un PDF con un comprobante de ejemplo, con los datos actuales
+        del formulario (aunque todavía no se hayan guardado)."""
+        import os
+        import tempfile
+        from modulos.impresion import guardar_ticket_pdf, datos_de_ejemplo
+
+        config = dict(self.config_actual)
+        config.update({
+            "nombre_negocio": self.ent_nombre.get().strip(),
+            "rut_empresa": self.ent_rut.get().strip(),
+            "giro_empresa": self.ent_giro.get().strip(),
+            "direccion_empresa": self.ent_direccion.get().strip(),
+            "telefono_empresa": self.ent_telefono.get().strip(),
+            "ticket_tamano": self.cmb_ancho.get(),
+            "ticket_desglose_iva": "1" if self.var_iva.get() else "0",
+            "ticket_mensaje_pie": self.ent_pie.get().strip(),
+        })
+        ruta = os.path.join(tempfile.gettempdir(), "vim_erp_vista_previa.pdf")
+        try:
+            guardar_ticket_pdf(datos_de_ejemplo(), ruta, config)
+            os.startfile(ruta)
+        except Exception as e:
+            get_logger("configuracion.empresa").exception("No se pudo abrir la vista previa")
+            messagebox.showerror(
+                "Vista previa",
+                f"No se pudo generar o abrir la vista previa:\n{e}\n\n"
+                "Si el PDF se guardó, está en:\n" + ruta,
+                parent=self.parent)
+
+    def _guardar_impresora(self):
+        impresora = self._impresora_seleccionada()
+        if set_config("impresora_termica", impresora):
+            self.config_actual["impresora_termica"] = impresora
+
     def _impresora_seleccionada(self):
         val = (self.cmb_impresora.get() or "").strip()
         return "" if val in ("", "(Sin impresora)") else val
@@ -284,7 +329,7 @@ class EmpresaSeccion:
         direccion = self.ent_direccion.get().strip()
         tel = self.ent_telefono.get().strip()
         ancho = self.cmb_ancho.get()
-        moneda = self.ent_moneda.get().strip() or "$"
+        moneda = "$"
         pie_txt = self.ent_pie.get().strip()
         
         # Tamaños proporcionales reales: 58mm ≈ 230px, 80mm ≈ 315px (a 96 DPI)
@@ -294,7 +339,7 @@ class EmpresaSeccion:
         
         self.ticket_spacer.config(width=pixeles)
         
-        self.lbl_t_nombre.config(text=nombre)
+        self.lbl_t_nombre.config(text=nombre, wraplength=pixeles - escalar(20))
         # Re-pack nombre para asegurar orden
         self.lbl_t_nombre.pack(fill="x", pady=(5, 2))
         
@@ -355,7 +400,6 @@ class EmpresaSeccion:
         set_config("direccion_empresa", self.ent_direccion.get().strip())
         set_config("telefono_empresa", self.ent_telefono.get().strip())
         set_config("email_empresa", self.ent_email.get().strip())
-        set_config("moneda", self.ent_moneda.get().strip())
         
         # Configuración de ticket (unificada)
         set_config("ticket_tamano", self.cmb_ancho.get())
@@ -369,7 +413,7 @@ class EmpresaSeccion:
         set_config("ticket_mensaje_pie", self.ent_pie.get().strip())
 
         # Impresora térmica
-        set_config("impresora_termica", self._impresora_seleccionada())
+        self._guardar_impresora()
         set_config("impresion_automatica", "1" if self.var_impresion_auto.get() else "0")
         
         messagebox.showinfo("Éxito", "Configuración de la empresa y tickets guardada correctamente.", parent=self.parent)

@@ -4,7 +4,7 @@ Sistema de punto de venta y administración para pequeños negocios, hecho en Py
 
 ## Funciones
 
-- Punto de venta (POS) con impresión de boletas en impresoras térmicas de 58 mm y 80 mm (ESC/POS)
+- Punto de venta (POS) con comprobantes en impresoras térmicas de 58 mm y 80 mm (ESC/POS) o en PDF. No emite boletas electrónicas del SII
 - Modo productos (con inventario) o modo servicios (sin stock), elegido en el primer inicio
 - Productos, categorías e inventario con historial de movimientos
 - Compras y proveedores
@@ -49,6 +49,10 @@ build.bat
 ```
 
 El ejecutable queda en `dist\VIM_ERP.exe`.
+
+## Publicar una versión
+
+`crear_paquete_distribucion.bat` corre las pruebas, compila el `.exe` y arma `..\VIM_ERP_v1.0_Windows.zip` con el ejecutable, el manual, el LEEME, la licencia y la huella SHA-256. La versión se cambia en la línea `set "VERSION=..."` del mismo archivo.
 
 ## Licencia
 

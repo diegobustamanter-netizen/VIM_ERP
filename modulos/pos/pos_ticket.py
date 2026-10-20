@@ -252,6 +252,11 @@ class POSTicketMixin:
                 tags=(tag,)
             )
 
+        # Lo que se cobra puede no ser la suma de las líneas: IVA encima
+        # (precios sin IVA) o redondeo a $10. Se muestra el monto real.
+        montos = self.calcular_montos("efectivo")
+        total = montos["total"]
+
         # Ajuste adaptativo de fuente para el TOTAL grande
         if total >= 1000000:
             nueva_fuente = ("Segoe UI", escalar_fuente(22, minimo=16, maximo=24), "bold")
@@ -259,8 +264,9 @@ class POSTicketMixin:
             nueva_fuente = ("Segoe UI", escalar_fuente(26, minimo=18, maximo=28), "bold")
         else:
             nueva_fuente = ("Segoe UI", escalar_fuente(32, minimo=22, maximo=34), "bold")
-        
+
         self.lbl_total.config(font=nueva_fuente, text=f"Total: {moneda(total)}")
+        self._mostrar_desglose(montos)
         self.lbl_items.config(text=f"Líneas: {len(self.ticket)}")
         self.actualizar_vuelto()
 
@@ -420,8 +426,33 @@ class POSTicketMixin:
         self.actualizar_vuelto()
 
 
-    def calcular_total(self):
+    def calcular_subtotal(self):
+        """Suma de las líneas, con los precios tal como están cargados."""
         return sum(convertir_float(linea["subtotal"]) for linea in self.ticket)
+
+    def calcular_montos(self, metodo_pago="efectivo"):
+        """Neto, IVA y total con la misma regla que usa la venta al guardarse."""
+        from database.finanzas_utils import calcular_totales_venta
+        return calcular_totales_venta(self.calcular_subtotal(), metodo_pago=metodo_pago)
+
+    def calcular_total(self, metodo_pago="efectivo"):
+        """Lo que se le cobra al cliente."""
+        if not self.ticket:
+            return 0
+        return self.calcular_montos(metodo_pago)["total"]
+
+    def _mostrar_desglose(self, montos):
+        """Línea chica bajo el total: IVA sumado y/o redondeo, si los hay."""
+        lbl = getattr(self, "lbl_desglose", None)
+        if lbl is None:
+            return
+        partes = []
+        if self.ticket and not montos["iva_incluido"] and montos["impuesto"]:
+            partes.append(f"Neto {moneda(montos['neto'])} + IVA {moneda(montos['impuesto'])}")
+        if self.ticket and montos["ajuste_redondeo"]:
+            exacto = montos["total"] - montos["ajuste_redondeo"]
+            partes.append(f"Efectivo redondeado · Tarjeta {moneda(exacto)}")
+        lbl.config(text="   ·   ".join(partes))
 
 
     def actualizar_vuelto(self):
@@ -454,7 +485,7 @@ class POSTicketMixin:
             messagebox.showwarning("Atención", "El ticket está vacío.")
             return
 
-        total = self.calcular_total()
+        total = self.calcular_total(metodo_pago)
     
         if metodo_pago == "efectivo":
             pago = convertir_float(self.entry_pago_cliente.get(), 0)
@@ -548,43 +579,14 @@ def _imprimir_ticket_fisico(venta_id, metodo_pago, total, pago, vuelto,
     try:
         from modulos.impresion import imprimir_ticket_venta, impresora_configurada
         from modulos.configuracion.utils import get_config
-        from database.utils import ahora as ahora_util
-        from modulos.seguridad.sesion import Sesion
-        from database.connection import session_db
 
         if not impresora_configurada():
             return False
         if not forzar and get_config("impresion_automatica", "1") not in ("1", "True", "true"):
             return False
 
-        # El folio ya viene resuelto por quien llama; solo falta el impuesto.
-        folio_final, impuesto = folio or f"VTA-{venta_id:06d}", 0
-        try:
-            with session_db(dict_rows=True) as conn:
-                fila = conn.execute(
-                    "SELECT folio, impuesto FROM ventas WHERE id = ?", (venta_id,)
-                ).fetchone()
-                if fila:
-                    folio_final = folio or fila.get("folio") or folio_final
-                    impuesto = fila.get("impuesto") or 0
-        except Exception as e:
-            # Con folio/impuesto por defecto igual se puede imprimir
-            from vim_logger import get_logger
-            get_logger("pos.impresion").warning(
-                f"No se pudo leer folio/impuesto de la venta #{venta_id}: {e}"
-            )
-
-        datos = {
-            "folio": folio_final,
-            "fecha": ahora_util("%d/%m/%Y %H:%M"),
-            "cajero": Sesion.get_nombre(),
-            "metodo_pago": metodo_pago,
-            "lineas": lineas_impresion,
-            "impuesto": impuesto,
-            "total": total,
-            "pago": pago,
-            "vuelto": vuelto,
-        }
+        datos = _datos_comprobante(venta_id, metodo_pago, total, pago, vuelto,
+                                   lineas_impresion, folio)
         imprimir_ticket_venta(datos)
         return True
     except Exception as e:
@@ -603,6 +605,83 @@ def _imprimir_ticket_fisico(venta_id, metodo_pago, total, pago, vuelto,
 
 
 _error_impresion_mostrado = False
+
+
+def _fecha_de_la_venta(fecha_db):
+    """'2026-10-20 14:05:33' (base) -> '20/10/2026 14:05' (ticket)."""
+    from datetime import datetime
+    try:
+        return datetime.strptime(str(fecha_db)[:19], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y %H:%M")
+    except (TypeError, ValueError):
+        return ""
+
+
+def _datos_comprobante(venta_id, metodo_pago, total, pago, vuelto,
+                       lineas_impresion, folio=None):
+    """Datos del comprobante (papel o PDF) a partir de la venta guardada.
+
+    La fecha es la de la venta, no la del momento de imprimir: antes una
+    reimpresión salía con la hora en que se reimprimía.
+    """
+    from database.utils import ahora as ahora_util
+    from database.connection import session_db
+    from modulos.seguridad.sesion import Sesion
+
+    folio_final, impuesto, fecha = folio or f"VTA-{venta_id:06d}", 0, ""
+    try:
+        with session_db(dict_rows=True) as conn:
+            fila = conn.execute(
+                "SELECT folio, impuesto, fecha FROM ventas WHERE id = ?", (venta_id,)
+            ).fetchone()
+            if fila:
+                folio_final = folio or fila.get("folio") or folio_final
+                impuesto = fila.get("impuesto") or 0
+                fecha = _fecha_de_la_venta(fila.get("fecha"))
+    except Exception as e:
+        # Con folio/impuesto por defecto igual se puede imprimir
+        get_logger("pos.impresion").warning(
+            f"No se pudo leer folio/impuesto de la venta #{venta_id}: {e}"
+        )
+
+    return {
+        "folio": folio_final,
+        "fecha": fecha or ahora_util("%d/%m/%Y %H:%M"),
+        "cajero": Sesion.get_nombre(),
+        "metodo_pago": metodo_pago,
+        "lineas": lineas_impresion,
+        "impuesto": impuesto,
+        "total": total,
+        "pago": pago,
+        "vuelto": vuelto,
+    }
+
+
+def _guardar_comprobante_pdf(venta_id, metodo_pago, total, pago, vuelto,
+                             lineas_impresion, folio=None, parent=None):
+    """Pide dónde guardar el comprobante en PDF, lo guarda y lo abre."""
+    import os
+    from tkinter import filedialog
+    from modulos.impresion import guardar_ticket_pdf
+
+    datos = _datos_comprobante(venta_id, metodo_pago, total, pago, vuelto,
+                               lineas_impresion, folio)
+    ruta = filedialog.asksaveasfilename(
+        parent=parent, title="Guardar comprobante",
+        defaultextension=".pdf", filetypes=[("PDF", "*.pdf")],
+        initialfile=f"comprobante_{datos['folio']}.pdf",
+    )
+    if not ruta:
+        return
+    try:
+        guardar_ticket_pdf(datos, ruta)
+    except Exception as e:
+        get_logger("pos.impresion").exception("No se pudo guardar el comprobante en PDF")
+        messagebox.showerror("Comprobante", f"No se pudo guardar el PDF:\n{e}", parent=parent)
+        return
+    try:
+        os.startfile(ruta)
+    except Exception:
+        messagebox.showinfo("Comprobante", f"Comprobante guardado en:\n{ruta}", parent=parent)
 
 
 def _mostrar_recibo_digital(self, venta_id, metodo_pago, total, pago, vuelto,
@@ -644,8 +723,10 @@ def _mostrar_recibo_digital(self, venta_id, metodo_pago, total, pago, vuelto,
     scroll_cont.pack(fill="both", expand=True, padx=20, pady=(15, 5))
 
     # Encabezado
+    # Un nombre largo se corta en varias líneas en vez de salirse del recibo
     tk.Label(interior, text=nombre_negocio, font=("Segoe UI", escalar_fuente(16), "bold"),
-             fg="#002b5c", bg="white").pack(pady=(5, 2))
+             fg="#002b5c", bg="white", justify="center",
+             wraplength=escalar(330)).pack(pady=(5, 2))
     tk.Label(interior, text="═" * 40, font=("Consolas", escalar_fuente(8)),
              fg="#ccc", bg="white").pack()
 
@@ -683,6 +764,19 @@ def _mostrar_recibo_digital(self, venta_id, metodo_pago, total, pago, vuelto,
     tk.Label(interior, text="─" * 48, font=("Consolas", escalar_fuente(8)),
              fg="#ddd", bg="white").pack(pady=(6, 4))
 
+    # Si se cobró distinto de la suma de las líneas (IVA sumado al precio o
+    # redondeo en efectivo), se muestra la diferencia para que cuadre a la vista.
+    suma_lineas = sum(convertir_float(l["subtotal"]) for l in self.ticket)
+    if abs(total - suma_lineas) >= 1:
+        for texto, valor in (("Subtotal:", suma_lineas),
+                             ("IVA / redondeo:", total - suma_lineas)):
+            fila = tk.Frame(interior, bg="white")
+            fila.pack(fill="x", padx=5)
+            tk.Label(fila, text=texto, font=("Segoe UI", escalar_fuente(9)),
+                     fg="#555", bg="white", anchor="w").pack(side="left")
+            tk.Label(fila, text=moneda(valor), font=("Segoe UI", escalar_fuente(9)),
+                     fg="#555", bg="white", anchor="e").pack(side="right")
+
     # Totales
     row_total = tk.Frame(interior, bg="white")
     row_total.pack(fill="x", padx=5, pady=(2, 4))
@@ -709,7 +803,9 @@ def _mostrar_recibo_digital(self, venta_id, metodo_pago, total, pago, vuelto,
     tk.Label(interior, text="═" * 40, font=("Consolas", escalar_fuente(8)),
              fg="#ccc", bg="white").pack(pady=(8, 2))
     tk.Label(interior, text=msg_pie, font=("Segoe UI", escalar_fuente(9), "italic"),
-             fg="#888", bg="white").pack(pady=(0, 8))
+             fg="#888", bg="white").pack(pady=(0, 2))
+    tk.Label(interior, text="Comprobante interno de venta · No válido como boleta (SII)",
+             font=("Segoe UI", escalar_fuente(8)), fg="#999", bg="white").pack(pady=(0, 8))
 
     # Botones — fuera del scroll, siempre visibles
     f_botones = tk.Frame(top, bg="white")
@@ -744,6 +840,15 @@ def _mostrar_recibo_digital(self, venta_id, metodo_pago, total, pago, vuelto,
             f_botones, text="🖨 Imprimir", bg="#0ea5e9", fg="white",
             font=("Segoe UI", escalar_fuente(11), "bold"), relief="flat", cursor="hand2",
             command=_reimprimir
+        ).pack(side="left", fill="x", expand=True, padx=(0, 5), ipady=5)
+
+    if lineas_impresion:
+        tk.Button(
+            f_botones, text="📄 PDF", bg="#64748b", fg="white",
+            font=("Segoe UI", escalar_fuente(11), "bold"), relief="flat", cursor="hand2",
+            command=lambda: _guardar_comprobante_pdf(
+                venta_id, metodo_pago, total, pago, vuelto,
+                lineas_impresion, folio=folio, parent=top)
         ).pack(side="left", fill="x", expand=True, padx=(0, 5), ipady=5)
 
     btn_cerrar = tk.Button(

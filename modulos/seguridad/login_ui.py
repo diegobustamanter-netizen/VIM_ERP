@@ -12,7 +12,7 @@ from modulos.utils_globales import aplicar_barra_windows_azul, centrar_ventana_m
 from ui_scale import escalar, escalar_fuente
 
 class VentanaLogin:
-    def __init__(self, root, on_login_success):
+    def __init__(self, root, on_login_success, mostrar=True):
         self.root = root
         self.on_success = on_login_success
         
@@ -38,13 +38,18 @@ class VentanaLogin:
         self.top.update_idletasks()
         alto = self.main.winfo_reqheight()
         centrar_ventana_mejorado(self.top, escalar(500), alto, mostrar=False)
-        self.top.deiconify()
         self.top.parent = self.root # Evitar recolección de basura
-        self.top.lift()
-        self.top.focus_force()
+        if mostrar:
+            self.mostrar()
         
         # Manejar cierre de ventana (salir de app completa)
         self.top.protocol("WM_DELETE_WINDOW", self.root.quit)
+
+    def mostrar(self):
+        """Muestra el login ya construido (el inicio lo llama al cerrar el splash)."""
+        self.top.deiconify()
+        self.top.lift()
+        self.top.focus_force()
 
 
 

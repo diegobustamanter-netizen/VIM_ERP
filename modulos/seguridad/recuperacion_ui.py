@@ -174,7 +174,7 @@ class ModalOnboarding:
         tk.Label(
             self.container,
             text="Define si el sistema maneja stock e inventario.\n"
-                 "Lo podés cambiar después en Configuración → Finanzas.",
+                 "Lo puedes cambiar después en Configuración → Finanzas.",
             bg=COLOR_BLANCO, font=("Segoe UI", escalar_fuente(9)),
             justify="center", fg="#555"
         ).pack(pady=(0, 25), padx=20)
@@ -183,6 +183,20 @@ class ModalOnboarding:
         fila.pack(pady=(0, 20))
 
         def elegir(modo):
+            # Un clic equivocado cambia cómo se comporta todo el sistema:
+            # se confirma antes de seguir.
+            if modo == MODO_SERVICIOS:
+                pregunta = ("Elegiste SERVICIOS.\n\n"
+                            "El sistema no va a manejar stock ni inventario: "
+                            "cobrarás por servicio prestado (corte de pelo, reparación, etc.).\n\n"
+                            "¿Es correcto?")
+            else:
+                pregunta = ("Elegiste PRODUCTOS.\n\n"
+                            "El sistema va a controlar stock, inventario y proveedores "
+                            "de lo que vendes.\n\n"
+                            "¿Es correcto?")
+            if not messagebox.askyesno("Tipo de negocio", pregunta, parent=self.top):
+                return
             # convertir=True adapta los ítems de ejemplo de la instalación
             establecer_modo_negocio(modo, convertir=True)
             self._avanzar()
@@ -324,7 +338,7 @@ class ModalOnboarding:
                 "Esta contraseña NO se mostrará nuevamente."
             )
         else:
-            msg = "Ya podés empezar a usar el sistema."
+            msg = "Ya puedes empezar a usar el sistema."
 
         tk.Label(
             self.container, text=msg, bg=COLOR_BLANCO, font=("Segoe UI", escalar_fuente(11)),

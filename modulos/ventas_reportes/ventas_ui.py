@@ -264,6 +264,19 @@ def crear_panel_filtros(self, parent):
 
     self.aplicar_resalte_focus(self.entry_folio)
     self.aplicar_resalte_boton(self.btn_buscar, COLOR_SECUNDARIO)
+
+    # Enter en el folio busca; cambiar el método busca solo.
+    self.entry_folio.bind("<Return>", lambda e: self.buscar())
+    self.combo_metodo.bind("<<ComboboxSelected>>", lambda e: self.buscar())
+
+    # Si se elige una fecha a mano, el botón rápido (Hoy, Mes...) deja de
+    # verse marcado: si no, parecía que seguía activo con otras fechas.
+    def _fecha_manual(_e=None):
+        if getattr(self, 'btn_filtro_activo', None):
+            self.btn_filtro_activo.config(bg="#e9ecef", fg="#333")
+            self.btn_filtro_activo = None
+    self.entry_fecha_desde.bind("<<DateEntrySelected>>", _fecha_manual, add="+")
+    self.entry_fecha_hasta.bind("<<DateEntrySelected>>", _fecha_manual, add="+")
     self.aplicar_resalte_boton(self.btn_limpiar, "#6c757d")
 
 
@@ -271,7 +284,7 @@ def _armar_tab_historial(self, parent):
     top_bar = tk.Frame(parent, bg=COLOR_BLANCO)
     top_bar.pack(fill="x", padx=15, pady=(15, 8))
 
-    tk.Label(top_bar, text="Historial de Transacciones (Doble clic para auditar la boleta)", font=("Segoe UI", escalar_fuente(11), "bold"), bg=COLOR_BLANCO, fg=COLOR_PRIMARIO).pack(side="left")
+    tk.Label(top_bar, text="Historial de Transacciones (Doble clic para ver el detalle de la venta)", font=("Segoe UI", escalar_fuente(11), "bold"), bg=COLOR_BLANCO, fg=COLOR_PRIMARIO).pack(side="left")
 
     self.btn_anular = tk.Button(
         top_bar,

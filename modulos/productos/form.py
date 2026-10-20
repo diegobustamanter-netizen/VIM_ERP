@@ -121,29 +121,20 @@ class ProductosFormMixin:
         frame_botones = tk.Frame(parent, bg=COLOR_BLANCO)
         frame_botones.grid(row=15, column=0, columnspan=2, pady=5, padx=15, sticky="ew")
 
-        tk.Button(
+        # Un solo botón para crear y editar. Antes había "Guardar" y
+        # "Actualizar": con un producto cargado, apretar "Guardar" intentaba
+        # crearlo de nuevo en vez de guardar los cambios.
+        self.btn_guardar = tk.Button(
             frame_botones,
-            text="Guardar",
-            width=14,
+            text="💾 Guardar",
             bg=COLOR_SECUNDARIO,
             fg=COLOR_BLANCO,
             relief="flat",
             font=FUENTE_BOTON,
             cursor="hand2",
-            command=self.guardar_producto
-        ).grid(row=0, column=0, padx=5, pady=5)
-
-        tk.Button(
-            frame_botones,
-            text="Actualizar",
-            width=14,
-            bg=COLOR_PRIMARIO,
-            fg=COLOR_BLANCO,
-            relief="flat",
-            font=FUENTE_BOTON,
-            cursor="hand2",
-            command=self.actualizar_producto
-        ).grid(row=0, column=1, padx=5, pady=5)
+            command=self.guardar_o_actualizar
+        )
+        self.btn_guardar.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
 
         tk.Button(
             frame_botones,
@@ -247,7 +238,7 @@ class ProductosFormMixin:
             siguiente = campos[i + 1]
             campo.bind("<Return>", lambda e, s=siguiente: self.mover_siguiente_campo(s))
 
-        self.entry_proveedor.bind("<Return>", lambda e: self.guardar_producto())
+        self.entry_proveedor.bind("<Return>", lambda e: self.guardar_o_actualizar())
 
     def obtener_datos_formulario(self):
         codigo_barras = self.entry_codigo_barras.get().strip()
@@ -343,12 +334,23 @@ class ProductosFormMixin:
             entry.config(state="normal")
             entry.delete(0, tk.END)
 
-        self.combo_tipo_item.set("producto")
+        self.combo_tipo_item.set(tipo_item_por_defecto())
         self.combo_tipo_venta.set("unidad")
         self.actualizar_campos_segun_tipo()
         self._verificar_exclusividad_codigos()
 
         if limpiar_id:
             self.producto_id = None
+        self.actualizar_boton_guardar()
 
         self.entry_codigo_barras.focus_set()
+
+    def actualizar_boton_guardar(self):
+        """El botón dice qué va a pasar: crear uno nuevo o guardar cambios."""
+        boton = getattr(self, "btn_guardar", None)
+        if boton is None:
+            return
+        if getattr(self, "producto_id", None):
+            boton.config(text="💾 Guardar cambios", bg=COLOR_PRIMARIO)
+        else:
+            boton.config(text="💾 Guardar producto nuevo", bg=COLOR_SECUNDARIO)

@@ -33,3 +33,9 @@ VERSION NUEVA (por ejemplo 1.1)
 
 Los visitantes no necesitan cuenta de GitHub para ver la pagina ni para
 descargar el programa.
+
+CONTADOR DE DESCARGAS
+   La pagina muestra cuantas veces se descargo el ZIP, con el numero que
+   lleva GitHub (suma todos los Releases). Si reemplazas un ZIP, GitHub
+   reinicia su contador: anota el numero antes y sumalo en
+   DESCARGAS_PREVIAS, al final de index.html.

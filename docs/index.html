@@ -455,6 +455,13 @@
   }
   .descarga-bajada{margin:14px 0 30px;font-size:1.125rem;color:#C7D9EF;max-width:30em}
   .archivo{margin-top:14px;font-size:.875rem;color:#A9C4E4}
+  /* Contador de descargas (se llena desde GitHub; si falla, queda oculto) */
+  .contador{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:.875rem;font-weight:600;color:var(--azul)}
+  .contador[hidden]{display:none}
+  .contador .i{width:16px;height:16px}
+  .portada .contador{display:flex;justify-content:center}
+  .portada .contador[hidden]{display:none}
+  .contador-oscuro{color:#E2ECF8}
   .archivo code{background:rgba(255,255,255,.08);color:#E2ECF8}
   .ficha{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
   .ficha div{
@@ -745,6 +752,7 @@
       <a class="btn btn-claro btn-grande" href="#funciones">Ver qué hace</a>
     </div>
     <p class="portada-nota"><span class="nota-1">Windows 10 y 11 de 64&nbsp;bits</span> <span class="sep sep-1" aria-hidden="true">·</span> <span>63&nbsp;MB</span> <span class="sep" aria-hidden="true">·</span> <span>Sin instalación</span></p>
+    <p class="contador" data-contador hidden><svg class="i" aria-hidden="true"><use href="#i-descarga"/></svg><span data-numero></span>descargas</p>
     <p class="portada-aviso">¿Windows te muestra un aviso azul al abrirlo? Es normal: <a href="#aviso-windows">mira qué hacer</a>.</p>
     <!-- Solo se ve en celulares: el programa es para computadores con Windows -->
     <p class="portada-movil">¿Lo estás viendo en el celular? VIM ERP funciona en computadores con Windows: abre esta página en tu PC para descargarlo.</p>
@@ -1048,6 +1056,7 @@
         <svg class="i" aria-hidden="true"><use href="#i-descarga"/></svg>Descargar para Windows
       </a>
       <p class="archivo"><code>VIM_ERP_v1.0_Windows.zip</code><span aria-hidden="true"> · </span><span class="sr">, </span>63&nbsp;MB</p>
+      <p class="contador contador-oscuro" data-contador hidden><svg class="i" aria-hidden="true"><use href="#i-descarga"/></svg><span data-numero></span>descargas</p>
     </div>
 
     <!-- El aviso de Windows (SmartScreen): va pegado al botón de descarga -->
@@ -1375,6 +1384,54 @@
     document.addEventListener('keydown',function(e){
       if(e.key==='Escape'&&menu.open){menu.open=false;menu.querySelector('summary').focus();}
     });
+  })();
+</script>
+
+<!-- Contador de descargas: suma las descargas de los ZIP de todos los Releases
+     usando el contador público de GitHub. No usa cookies ni identifica a nadie.
+     Si GitHub no responde, el contador simplemente no aparece.
+     DESCARGAS_PREVIAS: si reemplazas un ZIP en un Release, GitHub reinicia su
+     contador a cero; anota el número antes y súmalo aquí.
+     MINIMO_PARA_MOSTRAR: el contador se muestra recién desde ese número. -->
+<script>
+  (function(){
+    var DESCARGAS_PREVIAS = 0;
+    var MINIMO_PARA_MOSTRAR = 1;
+    var URL = 'https://api.github.com/repos/diegobustamanter-netizen/VIM_ERP/releases?per_page=100';
+    var CLAVE = 'vim_descargas';
+
+    function mostrar(total){
+      total += DESCARGAS_PREVIAS;
+      if (total < MINIMO_PARA_MOSTRAR) return;
+      var texto = total.toLocaleString('es-CL');
+      document.querySelectorAll('[data-contador]').forEach(function(el){
+        el.querySelector('[data-numero]').textContent = texto;
+        el.lastChild.textContent = total === 1 ? 'descarga' : 'descargas';
+        el.hidden = false;
+      });
+    }
+
+    // Reusa el número durante la visita para no consultar GitHub en cada recarga
+    try {
+      var guardado = JSON.parse(sessionStorage.getItem(CLAVE) || 'null');
+      if (guardado && Date.now() - guardado.t < 10 * 60 * 1000) { mostrar(guardado.n); return; }
+    } catch (e) {}
+
+    if (!window.fetch) return;
+    fetch(URL, {headers: {'Accept': 'application/vnd.github+json'}})
+      .then(function(r){ if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function(releases){
+        var total = 0;
+        releases.forEach(function(rel){
+          if (rel.draft) return;
+          (rel.assets || []).forEach(function(a){
+            if (/\.zip$/i.test(a.name)) total += a.download_count || 0;
+          });
+        });
+        try { sessionStorage.setItem(CLAVE, JSON.stringify({n: total, t: Date.now()})); } catch (e) {}
+        mostrar(total);
+      })
+      .catch(function(){});
   })();
 </script>
 </body>

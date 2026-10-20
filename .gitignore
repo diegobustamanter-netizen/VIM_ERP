@@ -51,3 +51,6 @@ node_modules/
 Assets/icono.ico
 Assets/*-*-*-*-*.png
 Assets/*uuid*.png
+
+# Archivos temporales que crean algunas unidades de red / FUSE
+.fuse_hidden*

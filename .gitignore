@@ -1,0 +1,53 @@
+# ── Python ──────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ── Compilados (el .exe se publica en GitHub Releases) ──
+build/
+dist/
+dist_para_enviar/
+*.exe
+*.pkg
+*.pyz
+*.zip
+
+# ── Datos reales y respaldos: NUNCA subir ───
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+backups/
+logs/
+*.log
+
+# ── Respaldos locales de cambios ────────────
+_respaldo*/
+*.tgz
+
+# ── IDE / Editor / herramientas ─────────────
+.vscode/
+.idea/
+.commandcode/
+*.swp
+*.swo
+
+# ── Sistema ─────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.lnk
+
+# ── Project ─────────────────────────────────
+node_modules/
+
+# ── Assets generados ────────────────────────
+Assets/icono.ico
+Assets/*-*-*-*-*.png
+Assets/*uuid*.png

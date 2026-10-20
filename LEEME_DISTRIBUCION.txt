@@ -1,0 +1,118 @@
+VIM ERP - Sistema de gestion para negocios
+===========================================
+
+Programa gratuito para punto de venta, control de stock, caja y reportes.
+Funciona sin internet. Los datos quedan en su propio computador.
+
+
+CONTENIDO DEL PAQUETE
+---------------------
+- VIM_ERP.exe ................ El programa (no requiere instalacion)
+- Manual_de_Uso_VIM_ERP.docx . Manual paso a paso (LEALO PRIMERO)
+- LEEME_DISTRIBUCION.txt ..... Este archivo
+
+
+COMO EMPEZAR
+------------
+1. Extraiga el ZIP en una carpeta local (Escritorio o Documentos).
+2. Abra VIM_ERP.exe.
+
+   Windows puede mostrar un aviso azul que dice "Windows protegio su PC".
+   Aparece porque el programa no esta firmado digitalmente, no porque
+   tenga algo malo. Haga clic en "Mas informacion" y luego en
+   "Ejecutar de todas formas".
+
+3. Al primer inicio el programa le pedira:
+   - Que tipo de negocio es (vende PRODUCTOS o presta SERVICIOS).
+   - Una pregunta de seguridad, que es la unica forma de recuperar el
+     acceso si olvida la clave.
+
+
+PRIMER INICIO DE SESION
+-----------------------
+   Usuario: admin
+   Clave:   1234
+
+   ****************************************************************
+   IMPORTANTE: esa clave es la misma en todas las instalaciones.
+   Cambiela ANTES de empezar a trabajar, desde el modulo Usuarios.
+   Si no la cambia, cualquiera que conozca el programa puede entrar
+   a su sistema y ver sus ventas.
+   ****************************************************************
+
+
+DONDE QUEDAN SUS DATOS
+----------------------
+El programa crea todo automaticamente en:
+
+   %LOCALAPPDATA%\VIM_ERP
+
+Ahi dentro:
+   \database ... su base de datos (ventas, productos, clientes)
+   \backups .... sus copias de seguridad
+   \logs ....... registro de errores, util si algo falla
+
+Para llegar rapido: copie esa ruta y peguela en el explorador de archivos.
+Desde el modulo Backup tambien hay un boton "Abrir carpeta".
+
+
+COPIAS DE SEGURIDAD (LEA ESTO)
+------------------------------
+El programa NO hace copias solo. Usted debe entrar al modulo Backup y
+apretar el boton, con la frecuencia que su negocio necesite.
+
+Esa carpeta esta en el disco local. Si el computador se rompe o se lo
+roban, los respaldos se pierden con el. Copie los archivos .db a un
+pendrive o a la nube cada cierto tiempo.
+
+
+TIPO DE NEGOCIO
+---------------
+Al primer inicio elige entre PRODUCTOS o SERVICIOS:
+
+   PRODUCTOS ... almacen, minimarket, tienda.
+                 Maneja stock, inventario y proveedores.
+
+   SERVICIOS ... peluqueria, taller, consultora.
+                 Sin stock: se cobra por servicio prestado.
+
+Se puede cambiar despues en Configuracion > Finanzas, pero al cambiarlo
+se convierten todos los items y el stock queda en cero. Elija bien la
+primera vez.
+
+
+IMPUESTOS
+---------
+En Configuracion > Finanzas puede fijar el IVA. Si su negocio no lo
+maneja, ponga 0 y el precio que cargue sera el precio que se cobre.
+
+
+IMPRESORA DE BOLETAS
+--------------------
+Funcionan las impresoras termicas de 58mm y 80mm instaladas en Windows
+(protocolo ESC/POS). Se configuran en Configuracion > Empresa.
+
+
+LO QUE ESTE PROGRAMA NO HACE
+----------------------------
+- NO emite boletas ni facturas electronicas ante el SII. Los tickets que
+  imprime son comprobantes internos, sin validez tributaria. Para emitir
+  documentos validos use el sistema del SII o un software certificado.
+
+- NO comparte datos entre varios computadores. Cada PC tiene su propia
+  base. Para pasar datos de uno a otro, haga un backup y restaurelo.
+
+- NO se actualiza solo. Si sale una version nueva hay que descargarla.
+
+
+REQUISITOS
+----------
+Windows 10 u 11 de 64 bits.
+
+
+GARANTIA
+--------
+Este programa se entrega gratis y tal como esta, sin garantia de ningun
+tipo. Usted es responsable de verificar sus propios numeros y de mantener
+copias de seguridad de su informacion. El autor no responde por perdidas
+de datos, errores de calculo ni perjuicios derivados del uso del programa.

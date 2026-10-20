@@ -1,0 +1,187 @@
+PAGINA WEB DE VIM ERP - como publicarla
+========================================
+
+Es un solo archivo HTML, sin dependencias. Se abre en cualquier navegador y
+funciona en cualquier hosting, incluso el mas basico.
+
+
+==========================================================
+PARTE 1 - LAS 4 COSAS QUE HAY QUE CAMBIAR ANTES DE SUBIRLA
+==========================================================
+
+1. TU CORREO
+   Buscar en index.html:  TU-CORREO@ejemplo.cl
+   Aparece 2 veces (seccion de contacto y pie de pagina).
+
+2. LAS CAPTURAS
+   Hay 4 recuadros grises marcando donde van. Para cada uno:
+   - Saca la captura del programa
+   - Guardala en  web/img/  con el nombre que indica el recuadro
+   - En index.html, reemplaza el bloque <div class="marcador">...</div>
+     por la linea <img> que esta comentada justo arriba
+
+   Nombres esperados:
+       img/pos.png         Pantalla del Punto de Venta
+       img/reportes.png    Estado de Resultados
+       img/productos.png   Modulo de Productos
+       img/caja.png        Cierre de caja
+
+   Consejo: sacalas con la ventana maximizada y datos que se vean realistas
+   (no los productos de ejemplo). Las capturas venden mas que el texto.
+
+3. LOS DOS ENLACES DE DESCARGA
+   Buscar en index.html:  descargas/VIM_ERP_Windows.zip
+                          descargas/Manual_de_Uso_VIM_ERP.docx
+   Ver la PARTE 2 para decidir donde alojar el ZIP.
+
+4. LA DIRECCION DEL SITIO
+   En la cabecera hay un bloque comentado con canonical y og:url.
+   Descomentarlo y poner tu dominio real. Sirve para que el enlace se vea
+   bien cuando alguien lo comparte por WhatsApp.
+
+
+==========================================================
+PARTE 2 - DONDE ALOJAR EL PROGRAMA (60 MB)
+==========================================================
+
+El ZIP pesa 60 MB. Ese numero manda en toda esta decision.
+
+------------------------------------------------
+OPCION RECOMENDADA: pagina en tu .cl + archivo en GitHub Releases
+------------------------------------------------
+
+La pagina vive en tu dominio y el boton de descarga apunta a GitHub.
+El visitante ve tu dominio; GitHub solo sirve el archivo.
+
+Por que conviene:
+   - No consume el trafico mensual de tu hosting (ver la advertencia abajo)
+   - Sin limite de descargas
+   - Descarga rapida y directa, sin pantallas intermedias
+   - Es lo que usa el software de verdad, y se nota
+
+NO significa publicar tu codigo. Se crea un repositorio con un README y
+nada mas; el .exe se sube como "release asset". El codigo sigue siendo tuyo
+y privado.
+
+Como se hace:
+   1. Crear cuenta en github.com (gratis)
+   2. Crear un repositorio publico, por ejemplo  vim-erp
+      Solo con un README. NADA de codigo fuente.
+   3. Entrar a Releases -> Create a new release
+   4. Tag: v1.0   Titulo: VIM ERP 1.0
+   5. Arrastrar VIM_ERP_Windows.zip a la zona de archivos adjuntos
+   6. Publish release
+   7. El enlace permanente queda asi:
+      https://github.com/TU-USUARIO/vim-erp/releases/latest/download/VIM_ERP_Windows.zip
+
+      Ojo con  /latest/download/ : ese enlace NO cambia nunca. Cuando
+      publiques la version 1.1, el mismo boton de tu pagina ya apunta a la
+      nueva. No hay que tocar el HTML.
+
+Limite: 2 GB por archivo. Con 60 MB estas holgado.
+
+
+------------------------------------------------
+OPCION 2: todo en tu hosting .cl
+------------------------------------------------
+
+Mas simple: se sube el ZIP a  public_html/descargas/  y listo.
+
+ADVERTENCIA IMPORTANTE - EL TRAFICO MENSUAL
+   Cada descarga gasta 60 MB del trafico de tu plan.
+       100 descargas  =  6 GB
+       500 descargas  =  30 GB
+     1.000 descargas  =  60 GB
+   Muchos planes economicos chilenos traen entre 50 y 100 GB al mes.
+   Si al programa le va bien, el sitio se cae justo el mes que empieza a
+   funcionar. Por eso la opcion 1 es mejor.
+
+   Revisa cuanto trafico incluye tu plan antes de decidir.
+
+
+------------------------------------------------
+OPCION 3: GOOGLE DRIVE - NO SE RECOMIENDA
+------------------------------------------------
+
+Se puede, pero da problemas concretos:
+
+   - CUOTA DE DESCARGAS: Drive corta la descarga de un archivo cuando mucha
+     gente lo baja el mismo dia. Aparece "Se supero la cuota de descarga" y
+     hay que esperar 24 horas. Justo el dia que a alguien le gusta y lo
+     comparte, el enlace deja de funcionar. Y no avisa.
+
+   - NO PUEDE ANALIZAR EL ARCHIVO: sobre 100 MB Drive muestra "No se puede
+     analizar en busca de virus". Con 60 MB no deberia salir, pero cualquier
+     version futura mas pesada lo activa. Ese aviso asusta.
+
+   - PANTALLA INTERMEDIA: no descarga directo. Manda a una pantalla de Drive
+     con la cuenta de Google al lado. Se pierde gente ahi.
+
+   - SE VE AMATEUR: para un producto con dominio propio, un enlace de Drive
+     resta credibilidad justo donde mas se necesita.
+
+Drive esta hecho para compartir archivos entre personas conocidas, no para
+funcionar como servidor de descargas publicas.
+
+Si igual lo quieres usar mientras pruebas, sirve para mandarselo a 5 o 10
+conocidos. Para publicarlo abierto, no.
+
+
+==========================================================
+PARTE 3 - SUBIR LA PAGINA A TU DOMINIO .CL
+==========================================================
+
+Con hosting tradicional (cPanel, FTP):
+   Subir el contenido de la carpeta web/ a la carpeta public_html
+   (o www, segun el proveedor). El index.html tiene que quedar en la raiz.
+
+Estructura final en el servidor:
+
+   public_html/
+       index.html
+       img/
+           pos.png
+           reportes.png
+           productos.png
+           caja.png
+       descargas/
+           Manual_de_Uso_VIM_ERP.docx
+           VIM_ERP_Windows.zip     <- solo si NO usas GitHub Releases
+
+
+==========================================================
+PARTE 4 - DOS COSAS QUE IMPORTAN MAS DE LO QUE PARECEN
+==========================================================
+
+HTTPS (el candadito)
+   Si la pagina no tiene candado, Chrome muestra "No es seguro" y mucha gente
+   se va antes de descargar. La mayoria de los hosting dan certificado
+   gratuito (Let's Encrypt) con un clic en el panel. Activalo.
+
+El aviso de SmartScreen
+   La pagina ya explica de frente por que Windows muestra la pantalla azul.
+   No lo saques: es la diferencia entre que alguien piense "esto es raro" y
+   que piense "ah, me avisaron". La transparencia genera mas confianza que
+   el silencio.
+
+
+==========================================================
+PARTE 5 - DESPUES DE PUBLICAR
+==========================================================
+
+COMO SABER SI ALGUIEN LA VISITA
+   Hoy la pagina no rastrea a nadie, y eso es parte de lo que promete.
+   Dos formas de medir sin traicionar eso:
+   - El panel de tu hosting suele traer estadisticas de visitas ya incluidas,
+     sin tocar el HTML ni usar cookies. Empieza por ahi.
+   - Si usas GitHub Releases, la propia pagina de releases muestra cuantas
+     veces se descargo cada archivo. Ese es el numero que de verdad importa.
+   Si algun dia agregas analitica con cookies, corresponde avisarlo en la
+   pagina.
+
+CUANDO SAQUES UNA VERSION NUEVA
+   1. Correr crear_paquete_distribucion.bat
+   2. Subir el ZIP nuevo como release en GitHub (tag v1.1)
+   3. En index.html, actualizar "Version 1.0" (aparece 2 veces:
+      bajo el boton de descarga y en el pie)
+   Si usas el enlace /latest/download/, el boton no hay que tocarlo.

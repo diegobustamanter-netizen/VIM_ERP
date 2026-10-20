@@ -304,7 +304,8 @@ class VentanaSplash:
         self.top = tk.Toplevel(parent)
         self.top.withdraw()  # Ocultar hasta posicionar
         self.top.overrideredirect(True)
-        aplicar_icono(self.top)
+        # Sin aplicar_icono: el splash no tiene barra de título, y al destruirse
+        # se llevaba el ícono compartido y el login quedaba sin ícono.
 
         self._logo = None
         if os.path.exists(LOGO_PATH):

@@ -6,7 +6,7 @@ import os
 from .auth import autenticar_usuario
 from .rate_limiter import limiter
 from .sesion import Sesion
-from config import COLOR_PRIMARIO, COLOR_SECUNDARIO, COLOR_BLANCO, LOGO_PATH
+from config import COLOR_PRIMARIO, COLOR_SECUNDARIO, COLOR_BLANCO, LOGO_PATH, ICO_PATH
 from database.connection import session_db
 from modulos.utils_globales import aplicar_barra_windows_azul, centrar_ventana_mejorado, preparar_modal_scrollable
 from ui_scale import escalar, escalar_fuente
@@ -47,6 +47,13 @@ class VentanaLogin:
 
     def mostrar(self):
         """Muestra el login ya construido (el inicio lo llama al cerrar el splash)."""
+        # Ícono propio de esta ventana: no depender del ícono por defecto,
+        # que se pierde cuando se cierra el splash.
+        try:
+            if os.path.exists(ICO_PATH):
+                self.top.iconbitmap(ICO_PATH)
+        except tk.TclError:
+            pass
         self.top.deiconify()
         self.top.lift()
         self.top.focus_force()
